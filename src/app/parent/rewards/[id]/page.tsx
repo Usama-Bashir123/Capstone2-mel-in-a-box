@@ -14,7 +14,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
 /* ── Badge data ────────────────────────────────────────── */
@@ -125,7 +124,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 /* ── Page ──────────────────────────────────────────────── */
 export default function BadgeDetailPage({ params }: { params: { id: string } }) {
-  const router = useRouter();
   const badge = badgeData[params.id] ?? badgeData["1"];
   const isEarned = badge.state === "earned";
 

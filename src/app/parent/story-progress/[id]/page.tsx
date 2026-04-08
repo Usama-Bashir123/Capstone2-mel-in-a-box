@@ -189,7 +189,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
             {pageRows.map((row, ri) => (
               <div key={ri} style={{ display: "flex", gap: "24px" }}>
-                {row.map((page, pi) => {
+                {row.map((page) => {
                   // Last page card gets half-width if it's alone in its row
                   const isLastAlone = row.length === 1;
                   return (
