@@ -16,12 +16,54 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, GithubAuthProvider } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [role, setRole] = useState<"parents" | "child">("child");
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
+  
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      router.push(role === "parents" ? "/parent" : "/child");
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Failed to log in. Please check your credentials.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSocialLogin = async (provider: "google" | "github") => {
+    setError(null);
+    setIsLoading(true);
+    
+    try {
+      const authProvider = provider === "google" 
+        ? new GoogleAuthProvider() 
+        : new GithubAuthProvider();
+      await signInWithPopup(auth, authProvider);
+      router.push(role === "parents" ? "/parent" : "/child");
+    } catch (err: any) {
+      setError(err.message || `Failed to sign in with ${provider}.`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <>
@@ -70,7 +112,12 @@ export default function LoginPage() {
       </div>
 
       {/* Form — layout_0GV9GR: col gap=24 */}
-      <div className="flex flex-col gap-6">
+      <form onSubmit={handleLogin} className="flex flex-col gap-6">
+        {error && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-600 px-4 py-3 rounded-lg text-sm font-nunito">
+            {error}
+          </div>
+        )}
 
         {/* Fields — layout_5BJVYO: col gap=20 */}
         <div className="flex flex-col gap-5">
@@ -83,6 +130,9 @@ export default function LoginPage() {
             {/* Input: border Gray/300 = #D6D6D6 1px, r=8, shadow-xs, padding 10px 14px */}
             <input
               type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
               placeholder="Enter your email"
               className="font-nunito font-normal focus:outline-none focus:ring-2 focus:ring-rose-100 focus:border-rose-300"
               style={{
@@ -105,6 +155,9 @@ export default function LoginPage() {
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
                 placeholder="••••••••"
                 className="w-full font-nunito font-normal focus:outline-none focus:ring-2 focus:ring-rose-100 focus:border-rose-300"
                 style={{
@@ -157,7 +210,9 @@ export default function LoginPage() {
         <div className="flex flex-col gap-4">
           {/* Sign in — Rosé/500 = #F63D68, Text md/Bold = Nunito 700 16px white, full w, padding 10px 16px, r=8 */}
           <button
-            className="flex items-center justify-center font-nunito font-bold text-white hover:opacity-90 transition-opacity w-full"
+            type="submit"
+            disabled={isLoading}
+            className="flex items-center justify-center font-nunito font-bold text-white hover:opacity-90 disabled:opacity-50 transition-opacity w-full"
             style={{
               padding: "10px 16px",
               borderRadius: "8px",
@@ -167,20 +222,22 @@ export default function LoginPage() {
               boxShadow: "0px 1px 2px 0px rgba(16,24,40,0.05)",
             }}
           >
-            Sign in
+            {isLoading ? <Loader2 className="animate-spin" size={20} /> : "Sign in"}
           </button>
 
-          {/* Social buttons — layout_QXLZW0: col gap=12 */}
           <div className="flex flex-col gap-3">
             {[
-              { label: "Sign in with Google", icon: "G", bg: "#EA4335" },
-              { label: "Sign in with Facebook", icon: "f", bg: "#1877F2" },
-              { label: "Sign in with Apple", icon: "⌘", bg: "#000000" },
-              { label: "Sign in with X", icon: "𝕏", bg: "#000000" },
-            ].map(({ label, icon, bg }) => (
+              { label: "Sign in with Google", icon: "G", bg: "#EA4335", provider: "google" as const },
+              { label: "Sign in with Facebook", icon: "f", bg: "#1877F2", provider: null },
+              { label: "Sign in with Apple", icon: "⌘", bg: "#000000", provider: null },
+              { label: "Sign in with X", icon: "𝕏", bg: "#000000", provider: null },
+            ].map(({ label, icon, bg, provider }) => (
               <button
                 key={label}
-                className="flex items-center justify-center gap-3 font-nunito font-semibold hover:bg-gray-50 transition-colors w-full"
+                type="button"
+                onClick={() => provider && handleSocialLogin(provider)}
+                disabled={isLoading}
+                className={`flex items-center justify-center gap-3 font-nunito font-semibold hover:bg-gray-50 transition-colors w-full ${!provider ? 'cursor-default' : ''}`}
                 style={{
                   padding: "10px 16px",
                   borderRadius: "8px",
@@ -189,6 +246,7 @@ export default function LoginPage() {
                   color: "#292929",
                   border: "1px solid #D0D5DD",
                   boxShadow: "0px 1px 2px 0px rgba(16,24,40,0.05)",
+                  opacity: isLoading || (!provider && isLoading) ? 0.5 : 1,
                 }}
               >
                 {/* Social icon 24×24 */}
@@ -203,7 +261,7 @@ export default function LoginPage() {
             ))}
           </div>
         </div>
-      </div>
+      </form>
 
       {/* Footer row — layout_RJTLCX: row justify center, gap=4, baseline */}
       <p className="font-nunito font-normal text-center" style={{ fontSize: "14px", lineHeight: "20px", color: "#292929" }}>
