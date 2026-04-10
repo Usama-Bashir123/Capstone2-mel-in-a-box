@@ -8,7 +8,6 @@
 // Pagination
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { Search, SlidersHorizontal, Eye, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 

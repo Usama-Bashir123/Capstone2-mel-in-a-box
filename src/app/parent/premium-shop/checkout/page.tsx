@@ -8,7 +8,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, ArrowLeft, X, CheckCircle2, XCircle } from "lucide-react";
+import { ChevronRight, ArrowLeft, X, XCircle } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────────── */
 type PaymentMethod = "card" | "paypal";

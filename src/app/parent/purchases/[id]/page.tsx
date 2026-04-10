@@ -9,7 +9,6 @@
 // Card 2 "Billing Information": Billing Email, Payment Status
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
 /* ── Data ──────────────────────────────────────────────── */
@@ -147,7 +146,6 @@ function FieldValue({ value }: { value: string }) {
 
 /* ── Page ──────────────────────────────────────────────── */
 export default function PurchaseDetailPage({ params }: { params: { id: string } }) {
-  const router = useRouter();
   const purchase = purchaseData[params.id] ?? purchaseData["1"];
   const isActive = purchase.status === "Active";
 
