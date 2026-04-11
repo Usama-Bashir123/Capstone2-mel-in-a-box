@@ -5,6 +5,7 @@
 // Search: 320px input r=8 border #E5E5E5 shadow-xs icon-leading
 // Actions: 40×40 circle buttons border #E5E5E5 shadow-xs
 
+import Link from "next/link";
 import { Search, Bell, Settings } from "lucide-react";
 
 export function ParentHeader() {
@@ -68,7 +69,8 @@ export function ParentHeader() {
         </button>
 
         {/* Settings */}
-        <button
+        <Link
+          href="/parent/settings"
           style={{
             width: "40px",
             height: "40px",
@@ -80,10 +82,11 @@ export function ParentHeader() {
             alignItems: "center",
             justifyContent: "center",
             cursor: "pointer",
+            textDecoration: "none",
           }}
         >
           <Settings size={18} style={{ color: "#424242" }} />
-        </button>
+        </Link>
 
         {/* Avatar */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
