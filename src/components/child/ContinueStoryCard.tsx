@@ -11,14 +11,17 @@
 import Link from "next/link";
 import Image from "next/image";
 
-const story = {
-  id: "1",
-  title: "Underwater Kingdom",
-  progress: 50,
-  lastRead: "2 hrs ago",
-};
+interface ContinueStoryCardProps {
+  story: {
+    id: string;
+    title: string;
+    thumbnail: string;
+    progress: number;
+    lastRead: string;
+  };
+}
 
-export function ContinueStoryCard() {
+export function ContinueStoryCard({ story }: ContinueStoryCardProps) {
   return (
     <div className="bg-white flex flex-col gap-4" style={{ borderRadius: "12px", padding: "20px" }}>
 
@@ -43,8 +46,8 @@ export function ContinueStoryCard() {
           style={{ height: "180px", borderRadius: "8px", border: "1px solid #E5E5E5" }}
         >
           <Image
-            src="/images/child/story-underwater.png"
-            alt="Underwater Kingdom"
+            src={story.thumbnail}
+            alt={story.title}
             fill
             style={{ objectFit: "cover" }}
           />

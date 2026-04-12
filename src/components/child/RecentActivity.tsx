@@ -7,14 +7,14 @@
 
 import { MoreVertical } from "lucide-react";
 
-const activities = [
-  { id: "1", text: "Earned 1 star — Jungle Counting Game" },
-  { id: "2", text: "Read Pirate Island Adventure — Page 4" },
-  { id: "3", text: 'Earned "Counting Star" badge' },
-  { id: "4", text: 'Earned "Counting Star" badge' },
-];
+interface RecentActivityProps {
+  activities: {
+    id: string;
+    text: string;
+  }[];
+}
 
-export function RecentActivity() {
+export function RecentActivity({ activities }: RecentActivityProps) {
   return (
     <div className="bg-white flex flex-col gap-4" style={{ borderRadius: "12px", padding: "20px" }}>
 

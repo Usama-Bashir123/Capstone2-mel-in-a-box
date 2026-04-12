@@ -10,16 +10,17 @@
 
 import { MoreVertical } from "lucide-react";
 
-const goals = [
-  { id: "1", label: 'Play the "Match the Letters" game', done: true },
-  { id: "2", label: "Play 1 game", done: true },
-  { id: "3", label: "Earn 1 star", done: true },
-  { id: "4", label: 'Play the "Match the Letters" game', done: false },
-];
+interface RewardGoalsProps {
+  goals: {
+    id: string;
+    label: string;
+    done: boolean;
+  }[];
+}
 
-const progress = { done: 3, total: 4 };
-
-export function RewardGoals() {
+export function RewardGoals({ goals }: RewardGoalsProps) {
+  const doneCount = goals.filter((g) => g.done).length;
+  const totalCount = goals.length;
   return (
     <div className="bg-white flex flex-col gap-4" style={{ borderRadius: "12px", padding: "20px" }}>
 
@@ -77,7 +78,7 @@ export function RewardGoals() {
           <div
             className="absolute inset-y-0 left-0"
             style={{
-              width: `${(progress.done / progress.total) * 100}%`,
+              width: `${(doneCount / totalCount) * 100}%`,
               background: "#F53D68",
               borderRadius: "9999px",
             }}
@@ -88,7 +89,7 @@ export function RewardGoals() {
           className="font-nunito font-semibold text-ink-secondary shrink-0"
           style={{ fontSize: "14px", lineHeight: "20px" }}
         >
-          {progress.done}/{progress.total}
+          {doneCount}/{totalCount}
         </span>
       </div>
     </div>
