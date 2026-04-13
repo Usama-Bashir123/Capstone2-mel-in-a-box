@@ -10,35 +10,13 @@
 import Link from "next/link";
 import Image from "next/image";
 
-// fill_2NUGOJ, fill_IHT04Q, fill_J6SDTI → same imageRefs as quick action thumbnails
-const recommended = [
-  {
-    id: "r1",
-    title: "The Magical Jungle",
-    tag: "Age: 3-6",
-    image: "/images/child/story-underwater.png",
-    href: "/child/stories",
-    btnLabel: "Start",
-  },
-  {
-    id: "r2",
-    title: "Jungle Counting Game",
-    tag: "Easy",
-    image: "/images/child/game-thumbnail.png",
-    href: "/child/games",
-    btnLabel: "Play",
-  },
-  {
-    id: "r3",
-    title: "Color the Pirate Ship",
-    tag: "Drawing",
-    image: "/images/child/creative-thumbnail.png",
-    href: "/child/games",
-    btnLabel: "Start",
-  },
-];
+import { Story } from "@/types";
 
-export function RecommendedSection() {
+interface RecommendedSectionProps {
+  stories: Story[];
+}
+
+export function RecommendedSection({ stories }: RecommendedSectionProps) {
   return (
     <div className="bg-white flex flex-col gap-4" style={{ borderRadius: "12px", padding: "20px" }}>
       {/* Section title — Text xl/Semibold = Nunito 600 20px lh=30px #292929 */}
@@ -51,9 +29,9 @@ export function RecommendedSection() {
 
       {/* Cards row — gap=20 */}
       <div className="flex gap-5">
-        {recommended.map((item) => (
+        {stories.map((story) => (
           <div
-            key={item.id}
+            key={story.id}
             className="flex flex-col flex-1 min-w-0"
             style={{ borderRadius: "12px", border: "1px solid #E5E5E5", padding: "12px", gap: "16px" }}
           >
@@ -63,8 +41,8 @@ export function RecommendedSection() {
               style={{ height: "180px", borderRadius: "8px", border: "1px solid #E5E5E5" }}
             >
               <Image
-                src={item.image}
-                alt={item.title}
+                src={story.thumbnail}
+                alt={story.title}
                 fill
                 style={{ objectFit: "cover" }}
               />
@@ -79,20 +57,20 @@ export function RecommendedSection() {
                   className="font-nunito font-semibold"
                   style={{ fontSize: "16px", lineHeight: "24px", color: "#141414" }}
                 >
-                  {item.title}
+                  {story.title}
                 </p>
                 {/* Text sm/Semibold = Nunito 600 14px lh=20px Gray true/700 = #424242 */}
                 <span
                   className="font-nunito font-semibold shrink-0"
                   style={{ fontSize: "14px", lineHeight: "20px", color: "#424242" }}
                 >
-                  {item.tag}
+                  {story.category}
                 </span>
               </div>
 
               {/* Button — Rosé/500 bg, Nunito 700 14px white, align stretch, r=8 h=40 */}
               <Link
-                href={item.href}
+                href={`/child/stories/${story.id}`}
                 className="flex items-center justify-center font-nunito font-bold text-white hover:opacity-90 transition-opacity"
                 style={{
                   height: "40px",
@@ -102,7 +80,7 @@ export function RecommendedSection() {
                   lineHeight: "20px",
                 }}
               >
-                {item.btnLabel}
+                {story.isLocked ? "Unlock" : "Start"}
               </Link>
             </div>
           </div>

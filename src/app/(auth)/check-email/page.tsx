@@ -1,12 +1,34 @@
-// Check your mail Page — node 213:16313
-// Title: "Check your mail" Nunito 700 30px rgb(20,20,20)
-// Subtext: 16px 400 rgb(82,82,82)
-// "Did not receive the email?" + "Click to resend" link
-// "Don't have an account?" + "Sign up" link
+"use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { sendPasswordResetEmail } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { Loader2 } from "lucide-react";
 
 export default function CheckEmailPage() {
+  const searchParams = useSearchParams();
+  const email = searchParams.get("email") || "your email";
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const handleResend = async () => {
+    if (!searchParams.get("email")) return;
+    
+    setIsLoading(true);
+    setMessage(null);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setMessage("Reset email resent successfully!");
+    } catch (err: any) {
+      console.error(err);
+      setMessage("Failed to resend. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 items-center text-center">
 
@@ -35,23 +57,33 @@ export default function CheckEmailPage() {
           className="font-nunito font-normal"
           style={{ fontSize: "16px", lineHeight: "24px", color: "#525252", maxWidth: "340px" }}
         >
-          An email has been sent to example@company.com please click on the included link to reset your password.
+          An email has been sent to <span className="font-bold text-ink">{email}</span>. Please click on the included link to reset your password.
         </p>
       </div>
 
       {/* Resend */}
-      <p
-        className="font-nunito font-normal"
-        style={{ fontSize: "14px", lineHeight: "20px", color: "#282828" }}
-      >
-        Did not receive the email?{" "}
-        <button
-          className="font-bold hover:opacity-75 transition-opacity"
-          style={{ color: "#F63D68" }}
+      <div className="flex flex-col gap-2">
+        <p
+          className="font-nunito font-normal"
+          style={{ fontSize: "14px", lineHeight: "20px", color: "#282828" }}
         >
-          Click to resend
-        </button>
-      </p>
+          Did not receive the email?{" "}
+          <button
+            onClick={handleResend}
+            disabled={isLoading || !searchParams.get("email")}
+            className="font-bold hover:opacity-75 transition-opacity disabled:opacity-50"
+            style={{ color: "#F63D68" }}
+          >
+            {isLoading ? "Sending..." : "Click to resend"}
+          </button>
+        </p>
+        
+        {message && (
+          <p className="font-nunito text-sm text-ink-subtle animate-in fade-in duration-300">
+            {message}
+          </p>
+        )}
+      </div>
 
       {/* Sign up prompt */}
       <p
