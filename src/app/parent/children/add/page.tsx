@@ -136,8 +136,9 @@ export default function AddChildPage() {
           const sRef = storageRef(storage, path);
           await uploadBytes(sRef, avatarFile);
           photoURL = await getDownloadURL(sRef);
-        } catch (storageErr: any) {
-          const code = storageErr?.code || storageErr?.message || "unknown";
+        } catch (storageErr: unknown) {
+          const e = storageErr as { code?: string; message?: string };
+          const code = e?.code || e?.message || "unknown";
           console.error("Storage upload failed:", storageErr);
           setError(
             `Photo upload failed (${code}). Child profile will be created without a photo. ` +
@@ -160,8 +161,9 @@ export default function AddChildPage() {
       });
 
       router.push("/parent/children");
-    } catch (err: any) {
-      const code = err?.code || err?.message || "unknown";
+    } catch (err: unknown) {
+      const e = err as { code?: string; message?: string };
+      const code = e?.code || e?.message || "unknown";
       console.error("Error saving child:", err);
       setError(`Failed to save profile (${code}). Please try again.`);
     } finally {

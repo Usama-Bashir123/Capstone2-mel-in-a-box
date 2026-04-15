@@ -18,7 +18,16 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth/auth-context";
-import { useRouter } from "next/navigation";
+
+interface ChildData {
+  id: string;
+  name: string;
+  dob: string;
+  gender: string;
+  language: string;
+  contentType: string;
+  photoURL?: string;
+}
 
 const AGE_TABS = ["All", "3-4", "5-6", "7+"];
 
@@ -96,8 +105,8 @@ function ChildCard({
   child,
   onDelete,
 }: {
-  child: any;
-  onDelete: (child: any) => void;
+  child: ChildData;
+  onDelete: (child: ChildData) => void;
 }) {
   const age = calcAge(child.dob);
 
@@ -194,12 +203,11 @@ function FilterToggle({ active, onChange }: { active: string; onChange: (t: stri
 // ── Page ───────────────────────────────────────────────────
 export default function ChildProfilesPage() {
   const { user } = useAuth();
-  const router = useRouter();
-  const [children, setChildren] = useState<any[]>([]);
+  const [children, setChildren] = useState<ChildData[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("All");
   const [search, setSearch] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ChildData | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // ── Firestore real-time subscription ──────────────────
@@ -208,7 +216,7 @@ export default function ChildProfilesPage() {
     const ref = collection(db, "users", user.uid, "children");
     const q = query(ref, orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
-      setChildren(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setChildren(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChildData)));
       setLoading(false);
     }, (err) => {
       console.error("Firestore error:", err);

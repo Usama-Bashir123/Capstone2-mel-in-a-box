@@ -13,6 +13,16 @@ import { doc, getDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth/auth-context";
 
+interface ChildData {
+  id: string;
+  name: string;
+  dob: string;
+  gender: string;
+  language: string;
+  contentType: string;
+  photoURL?: string;
+}
+
 // ── Helpers ────────────────────────────────────────────────
 function calcAge(dob: string): string {
   if (!dob) return "—";
@@ -87,7 +97,7 @@ export default function ViewChildPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { user } = useAuth();
 
-  const [child, setChild] = useState<any | null>(null);
+  const [child, setChild] = useState<ChildData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -100,7 +110,7 @@ export default function ViewChildPage({ params }: { params: { id: string } }) {
       try {
         const snap = await getDoc(doc(db, "users", user.uid, "children", params.id));
         if (snap.exists()) {
-          setChild({ id: snap.id, ...snap.data() });
+          setChild({ id: snap.id, ...snap.data() } as ChildData);
         } else {
           setNotFound(true);
         }

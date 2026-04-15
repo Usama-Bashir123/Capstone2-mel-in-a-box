@@ -164,8 +164,9 @@ export default function EditChildPage({ params }: { params: { id: string } }) {
           const sRef = storageRef(storage, path);
           await uploadBytes(sRef, avatarFile);
           photoURL = await getDownloadURL(sRef);
-        } catch (storageErr: any) {
-          const code = storageErr?.code || storageErr?.message || "unknown";
+        } catch (storageErr: unknown) {
+          const e = storageErr as { code?: string; message?: string };
+          const code = e?.code || e?.message || "unknown";
           console.error("Storage upload failed:", storageErr);
           // Still save the profile text fields — just warn about the photo
           setError(
@@ -188,7 +189,7 @@ export default function EditChildPage({ params }: { params: { id: string } }) {
       });
 
       router.push(`/parent/children/${params.id}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error updating child:", err);
       setError("Failed to update profile. Please try again.");
     } finally {
