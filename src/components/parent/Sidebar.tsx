@@ -10,7 +10,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/components/auth/auth-context";
 import {
   LayoutDashboard,
   Users,
@@ -34,6 +35,22 @@ const navItems = [
 
 export function ParentSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, signOut } = useAuth();
+
+  const displayName = user?.displayName || user?.email?.split("@")[0] || "User";
+  const email = user?.email || "";
+  const initials = displayName
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const handleLogout = async () => {
+    await signOut();
+    router.push("/login");
+  };
 
   return (
     <div style={{ width: "351px", padding: "20px", flexShrink: 0 }}>
@@ -124,14 +141,18 @@ export function ParentSidebar() {
                 flexShrink: 0,
               }}
             >
-              <span className="font-inter font-semibold" style={{ fontSize: "16px", color: "#525252" }}>S</span>
+              <span className="font-inter font-semibold" style={{ fontSize: "16px", color: "#525252" }}>{initials}</span>
             </div>
-            <div>
-              <p className="font-nunito font-semibold" style={{ fontSize: "16px", lineHeight: "24px", color: "#141414" }}>Sarah</p>
-              <p className="font-nunito font-normal" style={{ fontSize: "14px", lineHeight: "20px", color: "#525252" }}>sarah@untitledui.com</p>
+            <div style={{ minWidth: 0 }}>
+              <p className="font-nunito font-semibold" style={{ fontSize: "16px", lineHeight: "24px", color: "#141414", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "160px" }}>{displayName}</p>
+              <p className="font-nunito font-normal" style={{ fontSize: "14px", lineHeight: "20px", color: "#525252", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "160px" }}>{email}</p>
             </div>
           </div>
-          <button style={{ background: "none", border: "none", padding: "8px", cursor: "pointer", display: "flex" }}>
+          <button
+            onClick={handleLogout}
+            title="Log out"
+            style={{ background: "none", border: "none", padding: "8px", cursor: "pointer", display: "flex" }}
+          >
             <LogOut size={20} style={{ color: "#A3A3A3" }} />
           </button>
         </div>

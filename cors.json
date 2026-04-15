@@ -1,0 +1,19 @@
+[
+    {
+        "origin": [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "https://mel-in-a-box-c7a85.web.app",
+            "https://mel-in-a-box-c7a85.firebaseapp.com"
+        ],
+        "method": ["GET", "POST", "PUT", "DELETE", "HEAD"],
+        "responseHeader": [
+            "Content-Type",
+            "Authorization",
+            "Content-Length",
+            "User-Agent",
+            "x-goog-resumable"
+        ],
+        "maxAgeSeconds": 3600
+    }
+]
