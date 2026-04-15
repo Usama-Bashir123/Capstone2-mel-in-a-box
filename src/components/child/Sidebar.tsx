@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/components/auth/auth-context";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -25,6 +26,23 @@ const navItems = [
 
 export function ChildSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, signOut } = useAuth();
+
+  const displayName = user?.displayName || user?.email?.split("@")[0] || "User";
+  const email = user?.email || "";
+  const initials = displayName
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const handleLogout = async () => {
+    await signOut();
+    router.push("/login");
+  };
+
 
   return (
     <aside className="w-[311px] min-h-screen bg-white flex flex-col py-5 px-4 shrink-0 border-r border-gray-100">
@@ -116,34 +134,38 @@ export function ChildSidebar() {
 
         {/* Account row */}
         <div className="flex items-center justify-between mt-3 px-3 py-3 border-t border-gray-100 pt-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
             {/* Avatar — gray-100 bg, Inter 600 16px initials */}
             <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
               <span
                 className="font-inter font-semibold text-gray-500"
                 style={{ fontSize: "16px", lineHeight: "24px" }}
               >
-                S
+                {initials}
               </span>
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               {/* Nunito 600 16px lh=24px rgb(40,40,40) */}
               <p
                 className="font-nunito font-semibold text-ink-secondary"
-                style={{ fontSize: "16px", lineHeight: "24px" }}
+                style={{ fontSize: "16px", lineHeight: "24px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "160px" }}
               >
-                Sarah
+                {displayName}
               </p>
               {/* Nunito 400 14px lh=20px rgb(82,82,82) */}
               <p
                 className="font-nunito font-normal text-ink-subtle"
-                style={{ fontSize: "14px", lineHeight: "20px" }}
+                style={{ fontSize: "14px", lineHeight: "20px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "160px" }}
               >
-                sarah@untitledui.com
+                {email}
               </p>
             </div>
           </div>
-          <button className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button
+            onClick={handleLogout}
+            title="Log out"
+            className="text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+          >
             <LogOut size={20} />
           </button>
         </div>

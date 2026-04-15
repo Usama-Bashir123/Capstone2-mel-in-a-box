@@ -7,8 +7,18 @@
 
 import Link from "next/link";
 import { Search, Bell, Settings } from "lucide-react";
+import { useAuth } from "@/components/auth/auth-context";
 
 export function ParentHeader() {
+  const { user } = useAuth();
+  const displayName = user?.displayName || user?.email?.split("@")[0] || "User";
+  const initials = displayName
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   return (
     <header
       className="bg-white"
@@ -91,7 +101,7 @@ export function ParentHeader() {
         {/* Avatar */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
           <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#F2F4F7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <span className="font-inter font-semibold" style={{ fontSize: "16px", color: "#525252" }}>S</span>
+            <span className="font-inter font-semibold" style={{ fontSize: "16px", color: "#525252" }}>{initials}</span>
           </div>
         </div>
       </div>
