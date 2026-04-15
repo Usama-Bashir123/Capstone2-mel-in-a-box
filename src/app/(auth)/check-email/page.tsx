@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { Loader2 } from "lucide-react";
 
-export default function CheckEmailPage() {
+function CheckEmailContent() {
   const searchParams = useSearchParams();
   const email = searchParams.get("email") || "your email";
   const [isLoading, setIsLoading] = useState(false);
@@ -15,13 +14,13 @@ export default function CheckEmailPage() {
 
   const handleResend = async () => {
     if (!searchParams.get("email")) return;
-    
+
     setIsLoading(true);
     setMessage(null);
     try {
       await sendPasswordResetEmail(auth, email);
       setMessage("Reset email resent successfully!");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setMessage("Failed to resend. Please try again.");
     } finally {
@@ -77,7 +76,7 @@ export default function CheckEmailPage() {
             {isLoading ? "Sending..." : "Click to resend"}
           </button>
         </p>
-        
+
         {message && (
           <p className="font-nunito text-sm text-ink-subtle animate-in fade-in duration-300">
             {message}
@@ -100,5 +99,13 @@ export default function CheckEmailPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function CheckEmailPage() {
+  return (
+    <Suspense>
+      <CheckEmailContent />
+    </Suspense>
   );
 }

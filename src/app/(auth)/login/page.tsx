@@ -40,9 +40,9 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       router.push(role === "parents" ? "/parent" : "/child");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Failed to log in. Please check your credentials.");
+      setError(err instanceof Error ? err.message : "Failed to log in. Please check your credentials.");
     } finally {
       setIsLoading(false);
     }
@@ -58,8 +58,8 @@ export default function LoginPage() {
         : new GithubAuthProvider();
       await signInWithPopup(auth, authProvider);
       router.push(role === "parents" ? "/parent" : "/child");
-    } catch (err: any) {
-      setError(err.message || `Failed to sign in with ${provider}.`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : `Failed to sign in with ${provider}.`);
     } finally {
       setIsLoading(false);
     }

@@ -22,9 +22,9 @@ export default function ForgotPasswordPage() {
       await sendPasswordResetEmail(auth, email);
       // Redirect to check-email with the email in query params for better UX
       router.push(`/check-email?email=${encodeURIComponent(email)}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Failed to send reset email. Please try again.");
+      setError(err instanceof Error ? err.message : "Failed to send reset email. Please try again.");
     } finally {
       setIsLoading(false);
     }

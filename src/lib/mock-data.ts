@@ -1,4 +1,4 @@
-import { Story, Game, Badge, Award } from "@/types";
+import { Story } from "@/types";
 
 export const mockDashboardData = {
   child: {

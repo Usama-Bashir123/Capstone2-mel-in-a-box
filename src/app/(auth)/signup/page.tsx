@@ -50,9 +50,9 @@ export default function SignUpPage() {
         displayName: fullName,
       });
       router.push("/child");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Failed to create account.");
+      setError(err instanceof Error ? err.message : "Failed to create account.");
     } finally {
       setIsLoading(false);
     }
@@ -66,8 +66,8 @@ export default function SignUpPage() {
       const authProvider = new GoogleAuthProvider();
       await signInWithPopup(auth, authProvider);
       router.push("/child");
-    } catch (err: any) {
-      setError(err.message || `Failed to sign up with ${provider}.`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : `Failed to sign up with ${provider}.`);
     } finally {
       setIsLoading(false);
     }
