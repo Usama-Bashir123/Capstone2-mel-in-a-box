@@ -139,9 +139,20 @@ export function ParentSidebar() {
                 alignItems: "center",
                 justifyContent: "center",
                 flexShrink: 0,
+                overflow: "hidden",
+                border: "1px solid #E5E5E5",
               }}
             >
-              <span className="font-inter font-semibold" style={{ fontSize: "16px", color: "#525252" }}>{initials}</span>
+              {user?.photoURL ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.photoURL}
+                  alt="Avatar"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                <span className="font-inter font-semibold" style={{ fontSize: "16px", color: "#525252" }}>{initials}</span>
+              )}
             </div>
             <div style={{ minWidth: 0 }}>
               <p className="font-nunito font-semibold" style={{ fontSize: "16px", lineHeight: "24px", color: "#141414", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "160px" }}>{displayName}</p>
