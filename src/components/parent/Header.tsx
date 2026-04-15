@@ -100,8 +100,30 @@ export function ParentHeader() {
 
         {/* Avatar */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-          <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#F2F4F7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <span className="font-inter font-semibold" style={{ fontSize: "16px", color: "#525252" }}>{initials}</span>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              borderRadius: "50%",
+              background: "#F2F4F7",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              overflow: "hidden",
+              border: "1px solid #E5E5E5",
+            }}
+          >
+            {user?.photoURL ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={user.photoURL}
+                alt="Avatar"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            ) : (
+              <span className="font-inter font-semibold" style={{ fontSize: "16px", color: "#525252" }}>{initials}</span>
+            )}
           </div>
         </div>
       </div>

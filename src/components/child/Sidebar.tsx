@@ -136,13 +136,22 @@ export function ChildSidebar() {
         <div className="flex items-center justify-between mt-3 px-3 py-3 border-t border-gray-100 pt-4">
           <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
             {/* Avatar — gray-100 bg, Inter 600 16px initials */}
-            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-              <span
-                className="font-inter font-semibold text-gray-500"
-                style={{ fontSize: "16px", lineHeight: "24px" }}
-              >
-                {initials}
-              </span>
+            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden border border-gray-200">
+              {user?.photoURL ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.photoURL}
+                  alt="Avatar"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                <span
+                  className="font-inter font-semibold text-gray-500"
+                  style={{ fontSize: "16px", lineHeight: "24px" }}
+                >
+                  {initials}
+                </span>
+              )}
             </div>
             <div style={{ minWidth: 0 }}>
               {/* Nunito 600 16px lh=24px rgb(40,40,40) */}
