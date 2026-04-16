@@ -11,8 +11,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, updateProfile } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function SignUpPage() {
@@ -45,11 +45,16 @@ export default function SignUpPage() {
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      // Update profile with full name
-      await updateProfile(userCredential.user, {
+      // Create a Firestore document for the parent
+      await setDoc(doc(db, "users", userCredential.user.uid), {
         displayName: fullName,
+        email: email,
+        role: "parents",
+        status: "Active",
+        createdAt: serverTimestamp(),
       });
-      router.push("/child");
+
+      router.push("/parent");
     } catch (err: unknown) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Failed to create account.");
@@ -64,8 +69,19 @@ export default function SignUpPage() {
     
     try {
       const authProvider = new GoogleAuthProvider();
-      await signInWithPopup(auth, authProvider);
-      router.push("/child");
+      const userCredential = await signInWithPopup(auth, authProvider);
+      const user = userCredential.user;
+
+      // Create a Firestore document for the parent (if new)
+      await setDoc(doc(db, "users", user.uid), {
+        displayName: user.displayName || "Parent",
+        email: user.email,
+        role: "parents",
+        status: "Active",
+        createdAt: serverTimestamp(),
+      }, { merge: true });
+
+      router.push("/parent");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : `Failed to sign up with ${provider}.`);
     } finally {
