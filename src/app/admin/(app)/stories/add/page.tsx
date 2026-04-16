@@ -7,8 +7,13 @@ import {
   ChevronRight, UploadCloud,
   Bold, Italic, Underline, Strikethrough,
   AlignLeft, List, ListOrdered,
-  Link2, Image, Undo2, Redo2,
+  Link2, Image as ImageIcon, Undo2, Redo2,
 } from "lucide-react";
+import Image from "next/image";
+import { db, storage } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { logActivity } from "@/lib/activity";
 
 // ── Shared form primitives ──────────────────────────────────────
 
@@ -20,9 +25,9 @@ function FormLabel({ children, required }: { children: React.ReactNode; required
   );
 }
 
-function FormInput({ label, placeholder, value, onChange, required }: {
+function FormInput({ label, placeholder, value, onChange, required, disabled }: {
   label: string; placeholder: string; value: string;
-  onChange: (v: string) => void; required?: boolean;
+  onChange: (v: string) => void; required?: boolean; disabled?: boolean;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -32,11 +37,12 @@ function FormInput({ label, placeholder, value, onChange, required }: {
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
         className="font-nunito font-normal placeholder:text-gray-400 focus:outline-none"
         style={{
           height: "44px", padding: "10px 14px", borderRadius: "8px",
           border: "1px solid #E5E5E5", fontSize: "16px", color: "#141414",
-          background: "#FFFFFF", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+          background: disabled ? "#F5F5F5" : "#FFFFFF", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
           width: "100%", boxSizing: "border-box",
         }}
       />
@@ -44,9 +50,9 @@ function FormInput({ label, placeholder, value, onChange, required }: {
   );
 }
 
-function FormSelect({ label, options, value, onChange, required }: {
+function FormSelect({ label, options, value, onChange, required, disabled }: {
   label: string; options: string[]; value: string;
-  onChange: (v: string) => void; required?: boolean;
+  onChange: (v: string) => void; required?: boolean; disabled?: boolean;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1, minWidth: 0 }}>
@@ -55,12 +61,13 @@ function FormSelect({ label, options, value, onChange, required }: {
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
           className="font-nunito font-normal focus:outline-none"
           style={{
             height: "44px", padding: "10px 14px", paddingRight: "40px",
             borderRadius: "8px", border: "1px solid #E5E5E5", fontSize: "16px",
             color: value ? "#141414" : "#737373",
-            background: "#FFFFFF",
+            background: disabled ? "#F5F5F5" : "#FFFFFF",
             boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
             width: "100%", cursor: "pointer", appearance: "none",
           }}
@@ -68,7 +75,6 @@ function FormSelect({ label, options, value, onChange, required }: {
           <option value="" disabled>Choose</option>
           {options.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-        {/* Dropdown chevron */}
         <ChevronRight
           size={16}
           style={{
@@ -114,7 +120,7 @@ const TOOLBAR_GROUPS = [
   ],
   [
     { icon: Link2,  label: "Insert link" },
-    { icon: Image,  label: "Insert image" },
+    { icon: ImageIcon,  label: "Insert image" },
   ],
   [
     { icon: Undo2,  label: "Undo" },
@@ -149,7 +155,6 @@ function RichTextToolbar() {
               <Icon size={15} />
             </button>
           ))}
-          {/* Separator between groups (not after last) */}
           {gi < TOOLBAR_GROUPS.length - 1 && (
             <div style={{ width: "1px", height: "18px", background: "#E5E5E5", margin: "0 6px" }} />
           )}
@@ -161,18 +166,20 @@ function RichTextToolbar() {
 
 // ── Options ─────────────────────────────────────────────────────
 
-const AGE_OPTIONS      = ["3-6", "4-7", "5-8", "6-9", "7-10", "8-12"];
-const CATEGORY_OPTIONS = ["Adventure", "Magical", "Educational", "Fantasy", "Science", "Animals"];
+const AGE_OPTIONS      = ["3-4", "5-6", "7-8", "N/A"];
+const CATEGORY_OPTIONS = ["Magical", "Space", "Adventure", "Ocean", "Jungle"];
 
 // ── Page ────────────────────────────────────────────────────────
 
 export default function AddStoryPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [form, setForm] = useState({ name: "", age: "", category: "", description: "" });
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -190,12 +197,53 @@ export default function AddStoryPage() {
     if (file && file.type.startsWith("image/")) handleFileSelect(file);
   };
 
-  void coverFile; // used when API is wired
+  const onSave = async (status: "Published" | "Draft") => {
+    if (!form.name || isSaving) return;
+    setIsSaving(true);
+    let coverUrl = "";
+
+    try {
+      // 1. Upload Cover if exists
+      if (coverFile) {
+        const storageRef = ref(storage, `stories/${Date.now()}_${coverFile.name}`);
+        const snapshot = await uploadBytes(storageRef, coverFile);
+        coverUrl = await getDownloadURL(snapshot.ref);
+      }
+
+      // 2. Add to Firestore
+      const docData = {
+        title: form.name,
+        age: form.age || "N/A",
+        category: form.category || "Uncategorized",
+        description: form.description,
+        cover: coverUrl,
+        status: status,
+        createdAt: serverTimestamp(),
+        lastUpdated: serverTimestamp(),
+      };
+
+      await addDoc(collection(db, "stories"), docData);
+
+      // 3. Log Activity
+      await logActivity({
+        type: "Story",
+        activity: `"${form.name}" story ${status === "Draft" ? "saved as draft" : "published"}`,
+        targetName: form.name,
+        changes: [`Status: ${status}`, `Category: ${form.category}`]
+      });
+
+      router.push("/admin/stories");
+    } catch (err: any) {
+      console.error("Detailed Error saving story:", err);
+      alert(`Failed to save story: ${err?.message || "Unknown error"}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
-      {/* Breadcrumb + Actions */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <Link
@@ -214,37 +262,39 @@ export default function AddStoryPage() {
         <div style={{ display: "flex", gap: "12px", flexShrink: 0 }}>
           <button
             type="button"
-            onClick={() => router.push("/admin/stories")}
+            disabled={isSaving}
+            onClick={() => onSave("Draft")}
             className="font-nunito font-bold"
             style={{
               padding: "10px 14px", borderRadius: "8px",
               border: "1px solid #D6D6D6", background: "#FFFFFF",
               fontSize: "14px", color: "#424242", cursor: "pointer",
               boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+              opacity: isSaving ? 0.7 : 1,
             }}
           >
             Save As Draft
           </button>
           <button
             type="button"
-            onClick={() => router.push("/admin/stories")}
+            disabled={isSaving}
+            onClick={() => onSave("Published")}
             className="font-nunito font-bold"
             style={{
               padding: "10px 14px", borderRadius: "8px",
               border: "1px solid #F63D68", background: "#F63D68",
               fontSize: "14px", color: "#FFFFFF", cursor: "pointer",
               boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+              opacity: isSaving ? 0.7 : 1,
             }}
           >
-            Publish
+            {isSaving ? "Saving..." : "Publish"}
           </button>
         </div>
       </div>
 
-      {/* ── Single-column form (matches Figma layout_B4PZX4) ── */}
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
-        {/* 1. Basic Information */}
         <Card title="Basic Information">
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             <FormInput
@@ -253,39 +303,42 @@ export default function AddStoryPage() {
               value={form.name}
               onChange={set("name")}
               required
+              disabled={isSaving}
             />
             <div style={{ display: "flex", gap: "20px" }}>
-              <FormSelect label="Age"      options={AGE_OPTIONS}      value={form.age}      onChange={set("age")}      required />
-              <FormSelect label="Category" options={CATEGORY_OPTIONS} value={form.category} onChange={set("category")} required />
+              <FormSelect label="Age" options={AGE_OPTIONS} value={form.age} onChange={set("age")} required disabled={isSaving} />
+              <FormSelect label="Category" options={CATEGORY_OPTIONS} value={form.category} onChange={set("category")} required disabled={isSaving} />
             </div>
           </div>
         </Card>
 
-        {/* 2. Upload Cover Image */}
         <Card title="Upload Cover Image">
           <div
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => !isSaving && fileInputRef.current?.click()}
             style={{
               display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
               padding: "16px 24px", borderRadius: "8px",
               border: `1px solid ${dragging ? "#F63D68" : "#E5E5E5"}`,
               background: dragging ? "#FFF5F6" : "#FFFFFF",
-              cursor: "pointer", textAlign: "center", transition: "border-color 0.15s, background 0.15s",
+              cursor: isSaving ? "default" : "pointer", textAlign: "center", transition: "border-color 0.15s, background 0.15s",
+              opacity: isSaving ? 0.7 : 1,
             }}
           >
             {coverPreview ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={coverPreview}
-                alt="Cover preview"
-                style={{ width: "100%", maxHeight: "180px", objectFit: "cover", borderRadius: "8px" }}
-              />
+              <div style={{ width: "100%", height: "180px", position: "relative", borderRadius: "8px", overflow: "hidden" }}>
+                <Image
+                  src={coverPreview}
+                  alt="Cover preview"
+                  fill
+                  style={{ objectFit: "cover" }}
+                  unoptimized
+                />
+              </div>
             ) : (
               <>
-                {/* Featured icon — matches Figma 40×40 with shadow */}
                 <div style={{
                   width: "40px", height: "40px", borderRadius: "8px",
                   border: "1px solid #EAECF0", background: "#FFFFFF",
@@ -296,7 +349,6 @@ export default function AddStoryPage() {
                   <UploadCloud size={20} style={{ color: "#525252" }} />
                 </div>
 
-                {/* Action row */}
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                     <span className="font-nunito font-bold" style={{ fontSize: "14px", color: "#F63D68" }}>
@@ -307,7 +359,7 @@ export default function AddStoryPage() {
                     </span>
                   </div>
                   <span className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252", textAlign: "center" }}>
-                    SVG, PNG, JPG or mp4 (max. 800x400px)
+                    SVG, PNG, JPG (max. 800x400px)
                   </span>
                 </div>
               </>
@@ -316,14 +368,13 @@ export default function AddStoryPage() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,video/mp4"
+              accept="image/*"
               style={{ display: "none" }}
               onChange={(e) => { if (e.target.files?.[0]) handleFileSelect(e.target.files[0]); }}
             />
           </div>
         </Card>
 
-        {/* 3. Summary */}
         <Card title="Summary">
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <FormLabel>Description</FormLabel>
@@ -336,10 +387,11 @@ export default function AddStoryPage() {
                 placeholder="Enter a description..."
                 value={form.description}
                 onChange={(e) => set("description")(e.target.value)}
+                disabled={isSaving}
                 className="font-nunito font-normal placeholder:text-gray-400 focus:outline-none"
                 style={{
                   width: "100%", minHeight: "180px", padding: "12px 14px",
-                  fontSize: "16px", color: "#141414", background: "#FFFFFF",
+                  fontSize: "16px", color: "#141414", background: isSaving ? "#F5F5F5" : "#FFFFFF",
                   border: "none", resize: "vertical", boxSizing: "border-box", display: "block",
                 }}
               />

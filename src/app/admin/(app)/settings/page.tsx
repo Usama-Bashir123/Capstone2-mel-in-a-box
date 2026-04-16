@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { UploadCloud, Save, ChevronDown, Download, Trash2, RefreshCw, Eye, EyeOff, Search, Plus, Pencil, Lock, Unlock, ChevronRight, Bold, Italic, Underline, Strikethrough, Link, Image, Undo2, Redo2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { UploadCloud, Save, ChevronDown, Download, Trash2, RefreshCw, Eye, EyeOff, Search, Plus, Pencil, Lock, Unlock, ChevronRight, Bold, Italic, Underline, Strikethrough, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { db, storage } from "@/lib/firebase";
+import { doc, setDoc, onSnapshot, collection, query, where, serverTimestamp, addDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { logActivity } from "@/lib/activity";
 
 // ── Types ─────────────────────────────────────────────────────────
 type SettingsTab =
@@ -12,6 +17,13 @@ type SettingsTab =
   | "Feature Toggles"
   | "Backup & Data"
   | "Security";
+
+interface EmailTemplate {
+  id: string;
+  name: string;
+  body: string;
+  lastUpdated: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+}
 
 // ─────────────────────────────────────────────────────────────────
 // SHARED PRIMITIVES
@@ -134,18 +146,37 @@ const divider = <div style={{ height: "1px", background: "#F2F4F7" }} />;
 // ─────────────────────────────────────────────────────────────────
 // GENERAL TAB
 // ─────────────────────────────────────────────────────────────────
-function GeneralTab() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function GeneralTab({ settings, setSettings }: { settings: any; setSettings: (s: any) => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging]       = useState(false);
-  const [logoFile, setLogoFile]       = useState<File | null>(null);
-  const [language, setLanguage]       = useState("");
-  const [currency, setCurrency]       = useState("USD");
-  const [uploadLogo, setUploadLogo]   = useState<"enable" | "disable">("enable");
-  const [filterWords, setFilterWords] = useState<"enable" | "disable">("disable");
-  void logoFile;
+  const [uploading, setUploading]     = useState(false);
 
   const LANGUAGES  = ["English", "Spanish", "French", "German", "Arabic", "Portuguese"];
   const CURRENCIES = ["USD", "EUR", "GBP", "AUD", "CAD"];
+
+  const handleLogoUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      console.log("Attempting logo upload:", file.name);
+      const sRef = ref(storage, `settings/admin_logo_${Date.now()}_${file.name}`);
+      await uploadBytes(sRef, file);
+      const url = await getDownloadURL(sRef);
+      setSettings({ ...settings, logoURL: url, logoName: file.name });
+      console.log("Logo upload successful:", url);
+    } catch (err: any) {
+      console.error("Detailed Logo upload failed:", err);
+      let msg = "Failed to upload logo.";
+      if (err.code === "storage/unauthorized") {
+        msg = "Permission denied. Please ensure your Firebase Storage rules allow writes to the 'settings/' folder.";
+      } else if (err.message) {
+        msg += ` Error: ${err.message}`;
+      }
+      alert(msg);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -153,36 +184,38 @@ function GeneralTab() {
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) setLogoFile(f); }}
-          onClick={() => fileInputRef.current?.click()}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleLogoUpload(f); }}
+          onClick={() => !uploading && fileInputRef.current?.click()}
           style={{
             display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
-            padding: "24px", borderRadius: "8px", cursor: "pointer", textAlign: "center",
+            padding: "24px", borderRadius: "8px", cursor: uploading ? "not-allowed" : "pointer", textAlign: "center",
             border: `2px dashed ${dragging ? "#F63D68" : "#E5E5E5"}`,
             background: dragging ? "#FFF5F6" : "#FAFAFA",
             transition: "border-color 0.15s, background 0.15s",
+            opacity: uploading ? 0.6 : 1,
           }}
         >
           <div style={{ width: "40px", height: "40px", borderRadius: "8px", border: "1px solid #EAECF0", background: "#FFFFFF", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <UploadCloud size={20} style={{ color: "#525252" }} />
+            {uploading ? <Loader2 size={20} className="animate-spin" /> : <UploadCloud size={20} style={{ color: "#525252" }} />}
           </div>
-          {logoFile ? (
-            <span className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#141414" }}>{logoFile.name}</span>
+          {settings.logoURL ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+              <div style={{ position: "relative", height: "40px", width: "200px" }}>
+                <Image src={settings.logoURL} alt="Logo" fill style={{ objectFit: "contain" }} />
+              </div>
+              <span className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#141414" }}>{settings.logoName || "admin-logo.png"}</span>
+            </div>
           ) : (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                 <span className="font-nunito font-bold" style={{ fontSize: "14px", color: "#F63D68" }}>Click to upload</span>
                 <span className="font-nunito font-normal" style={{ fontSize: "14px", color: "#525252" }}>or drag and drop</span>
               </div>
-              <span className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252" }}>SVG, PNG, JPG or mp4 (max. 800×400px)</span>
+              <span className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252" }}>SVG, PNG, JPG (max. 800×400px)</span>
             </>
           )}
           <input ref={fileInputRef} type="file" style={{ display: "none" }} accept=".svg,.png,.jpg,.jpeg"
-            onChange={(e) => { if (e.target.files?.[0]) setLogoFile(e.target.files[0]); }} />
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span className="font-nunito font-medium" style={{ fontSize: "14px", color: "#424242" }}>Current Logo:</span>
-          <span className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#141414" }}>mel-logo.png</span>
+            onChange={(e) => { if (e.target.files?.[0]) handleLogoUpload(e.target.files[0]); }} />
         </div>
       </SectionCard>
 
@@ -191,15 +224,21 @@ function GeneralTab() {
           <FieldLabel>Default Story Language</FieldLabel>
           <div style={{ display: "flex", height: "44px", borderRadius: "8px", border: "1px solid #E5E5E5", background: "#FFFFFF", overflow: "hidden", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)" }}>
             <div style={{ flex: 1, position: "relative", borderRight: "1px solid #E5E5E5" }}>
-              <select value={language} onChange={(e) => setLanguage(e.target.value)} className="font-nunito font-normal focus:outline-none"
-                style={{ width: "100%", height: "100%", padding: "0 36px 0 14px", border: "none", background: "transparent", fontSize: "16px", color: language ? "#141414" : "#737373", cursor: "pointer", appearance: "none" }}>
+              <select 
+                value={settings.language || ""} 
+                onChange={(e) => setSettings({ ...settings, language: e.target.value })} 
+                className="font-nunito font-normal focus:outline-none"
+                style={{ width: "100%", height: "100%", padding: "0 36px 0 14px", border: "none", background: "transparent", fontSize: "16px", color: settings.language ? "#141414" : "#737373", cursor: "pointer", appearance: "none" }}>
                 <option value="" disabled>Choose</option>
                 {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
               </select>
               <ChevronDown size={16} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#A3A3A3", pointerEvents: "none" }} />
             </div>
             <div style={{ width: "96px", position: "relative", flexShrink: 0 }}>
-              <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="font-nunito font-medium focus:outline-none"
+              <select 
+                value={settings.currency || "USD"} 
+                onChange={(e) => setSettings({ ...settings, currency: e.target.value })} 
+                className="font-nunito font-medium focus:outline-none"
                 style={{ width: "100%", height: "100%", padding: "0 32px 0 14px", border: "none", background: "transparent", fontSize: "14px", color: "#344054", cursor: "pointer", appearance: "none" }}>
                 {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -209,8 +248,16 @@ function GeneralTab() {
         </div>
         {divider}
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <RadioToggle label="Upload Logo" value={uploadLogo} onChange={setUploadLogo} />
-          <RadioToggle label="Disable Inappropriate Words in Input" value={filterWords} onChange={setFilterWords} />
+          <RadioToggle 
+            label="Upload Logo Capability" 
+            value={settings.uploadLogo || "enable"} 
+            onChange={(v) => setSettings({ ...settings, uploadLogo: v })} 
+          />
+          <RadioToggle 
+            label="Disable Inappropriate Words in Input" 
+            value={settings.filterWords || "disable"} 
+            onChange={(v) => setSettings({ ...settings, filterWords: v })} 
+          />
         </div>
       </SectionCard>
     </div>
@@ -220,84 +267,52 @@ function GeneralTab() {
 // ─────────────────────────────────────────────────────────────────
 // PERMISSIONS TAB
 // ─────────────────────────────────────────────────────────────────
-const PERM_OPTIONS = ["Full Access", "Edit", "View Only", "Restricted"];
-const SUPER_ADMIN_PERMS = [
-  { label: "Access",    value: "Full system access" },
-  { label: "Settings",  value: "Editable" },
-  { label: "Stories",   value: "Full Access" },
-  { label: "Games",     value: "Full Access" },
-  { label: "Users",     value: "Full Access" },
-  { label: "Purchases", value: "Full Access" },
-  { label: "Assets",    value: "Full Access" },
-];
-const EDITOR_PERMS = [
-  { label: "Stories",   value: "Edit" },
-  { label: "Games",     value: "Edit" },
-  { label: "Assets",    value: "Edit" },
-  { label: "Users",     value: "View Only" },
-  { label: "Purchases", value: "View Only" },
-  { label: "Settings",  value: "Restricted" },
-];
-const REVIEWER_PERMS = [
-  { label: "Stories",   value: "View Only" },
-  { label: "Games",     value: "View Only" },
-  { label: "Assets",    value: "View Only" },
-  { label: "Users",     value: "Restricted" },
-  { label: "Purchases", value: "Restricted" },
-  { label: "Settings",  value: "Restricted" },
-];
 
-function PermissionsTab() {
-  const [superPerms, setSuperPerms]       = useState(SUPER_ADMIN_PERMS.map((p) => p.value));
-  const [editorPerms, setEditorPerms]     = useState(EDITOR_PERMS.map((p) => p.value));
-  const [reviewerPerms, setReviewerPerms] = useState(REVIEWER_PERMS.map((p) => p.value));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function PermissionsTab({ settings, setSettings }: { settings: any; setSettings: (s: any) => void }) {
+  const ROLES = ["Super Admin", "Editor", "Reviewer"];
+  const CATEGORIES = ["Access", "Settings", "Stories", "Games", "Users", "Purchases", "Assets"];
+  const OPTIONS = ["Full Access", "Full system access", "Editable", "Edit", "View Only", "Restricted"];
+
+  // Normalize permissions to the new map structure if it's currently an array or missing
+  const permissions = (settings.permissions && typeof settings.permissions === "object" && !Array.isArray(settings.permissions)) 
+    ? settings.permissions 
+    : {
+        "Super Admin": { Access: "Full system access", Settings: "Full Access", Stories: "Editable", Games: "Full system access", Users: "Restricted", Purchases: "Full Access", Assets: "Full system access" },
+        "Editor": { Stories: "View Only", Games: "Edit", Assets: "View Only", Users: "View Only", Purchases: "View Only", Settings: "View Only", Access: "Restricted" },
+        "Reviewer": { Stories: "Restricted", Games: "View Only", Assets: "Full Access", Users: "Edit", Purchases: "Restricted", Settings: "Restricted", Access: "Restricted" }
+      };
+
+  const updatePerm = (role: string, category: string, value: string) => {
+    setSettings({
+      ...settings,
+      permissions: {
+        ...permissions,
+        [role]: {
+          ...permissions[role],
+          [category]: value
+        }
+      }
+    });
+  };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {/* Super Admin */}
-      <SectionCard title="Super Admin's Roles">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-          {SUPER_ADMIN_PERMS.map((perm, i) => (
-            <SelectField
-              key={perm.label}
-              label={perm.label}
-              value={superPerms[i]}
-              onChange={(v) => setSuperPerms((prev) => prev.map((x, j) => j === i ? v : x))}
-              options={["Full system access", "Editable", "Full Access", "View Only", "Restricted"]}
-            />
-          ))}
-        </div>
-      </SectionCard>
-
-      {/* Editor */}
-      <SectionCard title="Editor's Roles">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-          {EDITOR_PERMS.map((perm, i) => (
-            <SelectField
-              key={perm.label}
-              label={perm.label}
-              value={editorPerms[i]}
-              onChange={(v) => setEditorPerms((prev) => prev.map((x, j) => j === i ? v : x))}
-              options={PERM_OPTIONS}
-            />
-          ))}
-        </div>
-      </SectionCard>
-
-      {/* Reviewer */}
-      <SectionCard title="Reviewer's Roles">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-          {REVIEWER_PERMS.map((perm, i) => (
-            <SelectField
-              key={perm.label}
-              label={perm.label}
-              value={reviewerPerms[i]}
-              onChange={(v) => setReviewerPerms((prev) => prev.map((x, j) => j === i ? v : x))}
-              options={PERM_OPTIONS}
-            />
-          ))}
-        </div>
-      </SectionCard>
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      {ROLES.map((role) => (
+        <SectionCard key={role} title={`${role}'s Roles`}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 24px" }}>
+            {CATEGORIES.map((cat) => (
+              <SelectField
+                key={cat}
+                label={cat}
+                value={permissions[role]?.[cat] || "View Only"}
+                onChange={(v) => updatePerm(role, cat, v)}
+                options={OPTIONS}
+              />
+            ))}
+          </div>
+        </SectionCard>
+      ))}
     </div>
   );
 }
@@ -313,11 +328,7 @@ const FEATURES = [
   { key: "audio",   label: "Child Audio Recording",      description: "Allow children to record voice messages in stories." },
 ];
 
-function FeatureTogglesTab() {
-  const [enabled, setEnabled] = useState<Record<string, boolean>>({
-    story: true, sdk: false, ai: true, backup: true, audio: false,
-  });
-
+function FeatureTogglesTab({ features, setFeatures }: { features: Record<string, boolean>; setFeatures: (f: Record<string, boolean>) => void }) {
   return (
     <SectionCard title="Feature Switches">
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
@@ -339,8 +350,8 @@ function FeatureTogglesTab() {
               </span>
             </div>
             <ToggleSwitch
-              value={enabled[feature.key]}
-              onChange={(v) => setEnabled((prev) => ({ ...prev, [feature.key]: v }))}
+              value={!!features[feature.key]}
+              onChange={(v) => setFeatures({ ...features, [feature.key]: v })}
             />
           </div>
         ))}
@@ -358,7 +369,8 @@ const BACKUP_HISTORY = [
   { date: "Mar 23, 2025",       file: "backup_2025_03_23.zip", size: "85 MB" },
 ];
 
-function BackupTab() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function BackupTab({ settings, setSettings }: { settings: any; setSettings: (s: any) => void }) {
   const [autoBackup, setAutoBackup] = useState("ON");
   const [frequency, setFrequency]   = useState("Daily");
 
@@ -455,16 +467,17 @@ const SESSIONS = [
   { device: "Safari (MacOS)",   location: "Australia", lastActive: "Yesterday" },
 ];
 
-function SecurityTab() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function SecurityTab({ settings, setSettings }: { settings: any; setSettings: (s: any) => void }) {
+  const policy = settings.passwordPolicy || { minLength: "8 Characters", expiry: "Every 60 days", requireNumbers: true, requireSpecial: true };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updatePolicy = (k: string, v: any) => setSettings({ ...settings, passwordPolicy: { ...policy, [k]: v } });
+
   const [twoFA, setTwoFA]               = useState<"enable" | "disable">("enable");
   const [deviceVerify, setDeviceVerify] = useState<"enable" | "disable">("enable");
   const [showSession, setShowSession]   = useState<"enable" | "disable">("enable");
   const [apiKey, setApiKey]             = useState("sk_live_abc123xyz789secretkey");
   const [showKey, setShowKey]           = useState(false);
-  const [minLength, setMinLength]       = useState("8 Characters");
-  const [expiry, setExpiry]             = useState("Every 60 days");
-  const [requireNumbers, setRequireNumbers] = useState(true);
-  const [requireSpecial, setRequireSpecial] = useState(true);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -533,23 +546,35 @@ function SecurityTab() {
       <SectionCard title="Password Policy">
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-            <SelectField label="Minimum Length" value={minLength} onChange={setMinLength}
-              options={["6 Characters", "8 Characters", "10 Characters", "12 Characters"]} />
-            <SelectField label="Password Expiry" value={expiry} onChange={setExpiry}
-              options={["Never", "Every 30 days", "Every 60 days", "Every 90 days"]} />
+            <SelectField 
+              label="Minimum Length" 
+              value={policy.minLength} 
+              onChange={(v) => updatePolicy("minLength", v)}
+              options={["6 Characters", "8 Characters", "10 Characters", "12 Characters"]} 
+            />
+            <SelectField 
+              label="Password Expiry" 
+              value={policy.expiry} 
+              onChange={(v) => updatePolicy("expiry", v)}
+              options={["Never", "Every 30 days", "Every 60 days", "Every 90 days"]} 
+            />
           </div>
           {divider}
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-            {/* Require Numbers toggle */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span className="font-nunito font-medium" style={{ fontSize: "14px", color: "#424242" }}>Require Numbers</span>
-              <ToggleSwitch value={requireNumbers} onChange={setRequireNumbers} />
+              <ToggleSwitch 
+                value={!!policy.requireNumbers} 
+                onChange={(v) => updatePolicy("requireNumbers", v)} 
+              />
             </div>
             {divider}
-            {/* Require Special Characters toggle */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span className="font-nunito font-medium" style={{ fontSize: "14px", color: "#424242" }}>Require Special Characters</span>
-              <ToggleSwitch value={requireSpecial} onChange={setRequireSpecial} />
+              <ToggleSwitch 
+                value={!!policy.requireSpecial} 
+                onChange={(v) => updatePolicy("requireSpecial", v)} 
+              />
             </div>
           </div>
         </div>
@@ -561,11 +586,6 @@ function SecurityTab() {
 // ─────────────────────────────────────────────────────────────────
 // ADMIN ACCOUNTS TAB
 // ─────────────────────────────────────────────────────────────────
-const ADMIN_DATA = [
-  { id: "1", name: "Admin1", email: "admin1@mail.com", role: "Super Admin", status: "Active"  },
-  { id: "2", name: "Admin2", email: "admin2@mail.com", role: "Editor",      status: "Disable" },
-  { id: "3", name: "Admin3", email: "admin3@mail.com", role: "Reviewer",    status: "Active"  },
-];
 
 type AdminView = "list" | "add" | "edit";
 
@@ -583,7 +603,7 @@ function AdminStatusBadge({ status }: { status: string }) {
 }
 
 function AdminForm({
-  title, initial, cancelLabel = "Cancel", saveLabel, onSave, onCancel,
+  title, initial, cancelLabel = "Cancel", saveLabel, onSave, onCancel, isEdit = false, adminId,
 }: {
   title: string;
   initial: { name: string; email: string; role: string; status: "enable" | "disable" };
@@ -591,17 +611,68 @@ function AdminForm({
   saveLabel: string;
   onSave: () => void;
   onCancel: () => void;
+  isEdit?: boolean;
+  adminId?: string;
 }) {
   const [form, setForm] = useState(initial);
   const [showPw, setShowPw] = useState(false);
   const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleAction = async () => {
+    if (!form.name || !form.email || (!isEdit && !password)) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+    setSaving(true);
+    try {
+      console.log(isEdit ? "Updating admin account..." : "Creating new admin account...");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const userData: any = {
+        displayName: form.name,
+        email: form.email,
+        role: form.role || "Editor",
+        status: form.status === "enable" ? "Active" : "Disabled",
+        updatedAt: serverTimestamp(),
+      };
+      if (password) userData.password = password;
+
+      if (isEdit && adminId) {
+        await setDoc(doc(db, "users", adminId), userData, { merge: true });
+        await logActivity({
+          type: "Admin",
+          activity: `Updated admin account for "${form.name}"`,
+          targetName: form.name
+        });
+      } else {
+        userData.createdAt = serverTimestamp();
+        await addDoc(collection(db, "users"), userData);
+        await logActivity({
+          type: "Admin",
+          activity: `Created new admin account for "${form.name}"`,
+          targetName: form.name
+        });
+      }
+      onSave();
+    } catch (err: any) {
+      console.error("Detailed Admin save failed:", err);
+      let msg = `Failed to save admin account.`;
+      if (err.code === "permission-denied") {
+        msg = "Permission denied. Please ensure your Firestore rules allow admins to manage the 'users' collection.";
+      } else if (err.message) {
+        msg += ` Error: ${err.message}`;
+      }
+      alert(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <SectionCard title={title}>
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
-        {/* Row 1: Full Name + Email */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <FieldLabel>Full Name</FieldLabel>
@@ -623,9 +694,8 @@ function AdminForm({
           </div>
         </div>
 
-        {/* Row 2: Password */}
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <FieldLabel>Password</FieldLabel>
+          <FieldLabel>{isEdit ? "New Password (leave blank to keep current)" : "Password"}</FieldLabel>
           <div style={{ position: "relative" }}>
             <input
               type={showPw ? "text" : "password"}
@@ -642,7 +712,6 @@ function AdminForm({
           </div>
         </div>
 
-        {/* Row 3: Role */}
         <SelectField
           label="Role"
           value={form.role}
@@ -651,7 +720,6 @@ function AdminForm({
           placeholder="Choose"
         />
 
-        {/* Row 4: Status */}
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <FieldLabel>Status</FieldLabel>
           <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
@@ -674,14 +742,16 @@ function AdminForm({
           </div>
         </div>
 
-        {/* Buttons */}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", paddingTop: "4px" }}>
           <button type="button" onClick={onCancel} className="font-nunito font-bold"
-            style={{ padding: "10px 16px", borderRadius: "8px", border: "1px solid #D6D6D6", background: "#FFFFFF", fontSize: "14px", color: "#424242", cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)" }}>
+            disabled={saving}
+            style={{ padding: "10px 16px", borderRadius: "8px", border: "1px solid #D6D6D6", background: "#FFFFFF", fontSize: "14px", color: "#424242", cursor: saving ? "not-allowed" : "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)", opacity: saving ? 0.6 : 1 }}>
             {cancelLabel}
           </button>
-          <button type="button" onClick={onSave} className="font-nunito font-bold"
-            style={{ padding: "10px 16px", borderRadius: "8px", border: "1px solid #F63D68", background: "#F63D68", fontSize: "14px", color: "#FFFFFF", cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)" }}>
+          <button type="button" onClick={handleAction} className="font-nunito font-bold"
+            disabled={saving}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "10px 16px", borderRadius: "8px", border: "1px solid #F63D68", background: "#F63D68", fontSize: "14px", color: "#FFFFFF", cursor: saving ? "not-allowed" : "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)", opacity: saving ? 0.6 : 1 }}>
+            {saving && <Loader2 size={14} className="animate-spin" />}
             {saveLabel}
           </button>
         </div>
@@ -690,20 +760,55 @@ function AdminForm({
   );
 }
 
-function AdminAccountsTab() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function AdminAccountsTab({ settings, setSettings }: { settings: any; setSettings: (s: any) => void }) {
   const [view, setView]         = useState<AdminView>("list");
-  const [editTarget, setEditTarget] = useState<typeof ADMIN_DATA[0] | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [editTarget, setEditTarget] = useState<any | null>(null);
   const [search, setSearch]     = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [admins, setAdmins]     = useState<any[]>([]);
+  const [loading, setLoading]   = useState(true);
 
-  const filtered = ADMIN_DATA.filter(
-    (a) => a.name.toLowerCase().includes(search.toLowerCase()) ||
-           a.email.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    const q = query(collection(db, "users"), where("role", "in", ["Admin", "Super Admin", "Editor", "Reviewer"]));
+    const unsub = onSnapshot(q, (snap) => {
+      setAdmins(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const filtered = admins.filter(
+    (a) => (a.displayName || a.name || "").toLowerCase().includes(search.toLowerCase()) ||
+           (a.email || "").toLowerCase().includes(search.toLowerCase())
   );
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleToggleStatus = async (admin: any) => {
+    const newStatus = admin.status === "Active" ? "Disabled" : "Active";
+    try {
+      await setDoc(doc(db, "users", admin.id), { status: newStatus }, { merge: true });
+      await logActivity({
+        type: "Admin",
+        activity: `${newStatus === "Active" ? "Enabled" : "Disabled"} admin account for "${admin.displayName || admin.name}"`,
+        targetName: admin.displayName || admin.name
+      });
+    } catch (err: any) {
+      console.error("Toggle admin status failed:", err);
+      let msg = "Failed to update status.";
+      if (err.code === "permission-denied") {
+        msg = "Permission denied. Please ensure your Firestore rules allow admins to manage the 'users' collection.";
+      } else if (err.message) {
+        msg += ` Error: ${err.message}`;
+      }
+      alert(msg);
+    }
+  };
 
   if (view === "add") {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {/* Breadcrumb */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <button onClick={() => setView("list")} className="font-nunito font-bold"
             style={{ fontSize: "14px", color: "#424242", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
@@ -726,7 +831,6 @@ function AdminAccountsTab() {
   if (view === "edit" && editTarget) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {/* Breadcrumb */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <button onClick={() => setView("list")} className="font-nunito font-bold"
             style={{ fontSize: "14px", color: "#424242", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
@@ -737,7 +841,14 @@ function AdminAccountsTab() {
         </div>
         <AdminForm
           title="Edit Admin"
-          initial={{ name: editTarget.name, email: editTarget.email, role: editTarget.role, status: editTarget.status === "Active" ? "enable" : "disable" }}
+          initial={{ 
+            name: editTarget.displayName || editTarget.name || "", 
+            email: editTarget.email || "", 
+            role: editTarget.role || "", 
+            status: editTarget.status === "Active" ? "enable" : "disable" 
+          }}
+          isEdit
+          adminId={editTarget.id}
           saveLabel="Save"
           onCancel={() => setView("list")}
           onSave={() => setView("list")}
@@ -746,11 +857,9 @@ function AdminAccountsTab() {
     );
   }
 
-  // List view
   return (
     <SectionCard title="Admin Account List" action={
       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        {/* Search */}
         <div style={{ position: "relative" }}>
           <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#737373", pointerEvents: "none" }} />
           <input
@@ -760,36 +869,39 @@ function AdminAccountsTab() {
             style={{ height: "40px", width: "280px", paddingLeft: "38px", paddingRight: "14px", borderRadius: "8px", border: "1px solid #E5E5E5", fontSize: "14px", color: "#141414", background: "#FFFFFF", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)" }}
           />
         </div>
-        {/* Add Admin */}
         <button onClick={() => setView("add")} className="font-nunito font-bold"
           style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "10px 14px", borderRadius: "8px", border: "1px solid #D6D6D6", background: "#FFFFFF", fontSize: "14px", color: "#424242", cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)", whiteSpace: "nowrap" }}>
           <Plus size={15} /> Add Admin
         </button>
       </div>
     }>
-      {/* Table header */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 130px 110px 90px", gap: "12px", padding: "10px 0", borderBottom: "1px solid #F2F4F7" }}>
         {["Name", "Email", "Role", "Status", "Action"].map((h) => (
           <span key={h} className="font-nunito font-semibold" style={{ fontSize: "12px", color: "#525252" }}>{h}</span>
         ))}
       </div>
-      {/* Rows */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div style={{ padding: "32px 0", textAlign: "center" }}>
+          <Loader2 className="animate-spin" size={24} style={{ color: "#F63D68" }} />
+        </div>
+      ) : filtered.length === 0 ? (
         <div style={{ padding: "32px 0", textAlign: "center" }}>
           <p className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#A3A3A3" }}>No admins found</p>
         </div>
       ) : filtered.map((row, i) => (
         <div key={row.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 130px 110px 90px", gap: "12px", padding: "16px 0", borderBottom: i < filtered.length - 1 ? "1px solid #F2F4F7" : "none", alignItems: "center" }}>
-          <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>{row.name}</span>
+          <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#141414" }}>{row.displayName || row.name || "N/A"}</span>
           <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>{row.email}</span>
           <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>{row.role}</span>
-          <div><AdminStatusBadge status={row.status} /></div>
+          <div><AdminStatusBadge status={row.status || "Active"} /></div>
           <div style={{ display: "flex", gap: "8px" }}>
             <button title="Edit" onClick={() => { setEditTarget(row); setView("edit"); }}
               style={{ width: "32px", height: "32px", borderRadius: "8px", border: "1px solid #E5E5E5", background: "#FAFAFA", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
               <Pencil size={14} style={{ color: "#525252" }} />
             </button>
-            <button title={row.status === "Active" ? "Disable" : "Enable"}
+            <button 
+              title={row.status === "Active" ? "Disable" : "Enable"}
+              onClick={() => handleToggleStatus(row)}
               style={{ width: "32px", height: "32px", borderRadius: "8px", border: "1px solid #E5E5E5", background: "#FAFAFA", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
               {row.status === "Active"
                 ? <Lock size={14} style={{ color: "#525252" }} />
@@ -805,32 +917,62 @@ function AdminAccountsTab() {
 // ─────────────────────────────────────────────────────────────────
 // EMAIL TEMPLATES TAB
 // ─────────────────────────────────────────────────────────────────
-const EMAIL_TEMPLATES = [
-  { id: "1", name: "Welcome Email",     lastUpdated: "Mar 08, 2025",
-    body: `Subject: Welcome to Mel In A Box!\n\nBody:\n"Hi {parent_name},\nWelcome to the magical world of Mel in A Box!\nYour child is now ready to explore interactive stories..."\n\nVariables you can use:\n- {parent_name}\n- {child_name}\n- {purchase_item}` },
-  { id: "2", name: "Purchase Receipt",  lastUpdated: "Mar 02, 2025",
-    body: `Subject: Your Purchase Receipt\n\nHi {parent_name},\nThank you for purchasing {purchase_item}.\n\nOrder Details:\n- Item: {purchase_item}\n- Amount: {amount}\n- Date: {purchase_date}` },
-  { id: "3", name: "Admin Invitation",  lastUpdated: "Feb 28, 2025",
-    body: `Subject: You've been invited as an Admin\n\nHi {admin_name},\nYou have been invited to join Mel in A Box as a {role}.\n\nClick the link below to set up your account:\n{invite_link}` },
-];
+// Email Templates logic
 
 type EmailView = "list" | "edit";
 
 function EmailTemplatesTab() {
   const [view, setView]       = useState<EmailView>("list");
-  const [editTarget, setEditTarget] = useState<typeof EMAIL_TEMPLATES[0] | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [editTarget, setEditTarget] = useState<EmailTemplate | null>(null);
   const [search, setSearch]   = useState("");
   const [templateName, setTemplateName] = useState("");
   const [body, setBody]       = useState("");
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving]   = useState(false);
 
-  const filtered = EMAIL_TEMPLATES.filter(
+  useEffect(() => {
+    const q = query(collection(db, "email_templates"));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as EmailTemplate));
+      setTemplates(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const filtered = templates.filter(
     (t) => t.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleSave = async () => {
+    if (!templateName || !editTarget || saving) return;
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "email_templates", editTarget.id), {
+        name: templateName,
+        body: body,
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+      
+      await logActivity({
+        type: "Settings",
+        activity: `Updated email template "${templateName}"`,
+        targetName: templateName
+      });
+      setView("list");
+    } catch (err) {
+      console.error("Save template failed:", err);
+      alert("Failed to save template.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (view === "edit" && editTarget) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {/* Breadcrumb */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <button onClick={() => setView("list")} className="font-nunito font-bold"
             style={{ fontSize: "14px", color: "#424242", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
@@ -842,8 +984,6 @@ function EmailTemplatesTab() {
 
         <SectionCard title="Edit Email Template">
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-
-            {/* Template Name */}
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <FieldLabel>Template Name</FieldLabel>
               <input
@@ -853,12 +993,9 @@ function EmailTemplatesTab() {
                 style={{ ...inputStyle }}
               />
             </div>
-
-            {/* Rich text editor area */}
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <FieldLabel>Email Body</FieldLabel>
               <div style={{ border: "1px solid #E5E5E5", borderRadius: "8px", overflow: "hidden", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)" }}>
-                {/* Toolbar */}
                 <div style={{ display: "flex", alignItems: "center", gap: "2px", padding: "8px 12px", background: "#FAFAFA", borderBottom: "1px solid #E5E5E5", flexWrap: "wrap" }}>
                   {[
                     { icon: <Bold size={15} />,          title: "Bold" },
@@ -867,28 +1004,11 @@ function EmailTemplatesTab() {
                     { icon: <Strikethrough size={15} />, title: "Strikethrough" },
                   ].map(({ icon, title }) => (
                     <button key={title} title={title} type="button"
-                      style={{ width: "28px", height: "28px", borderRadius: "4px", border: "none", background: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#525252" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "#EBEBEB")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                      {icon}
-                    </button>
-                  ))}
-                  <div style={{ width: "1px", height: "20px", background: "#E5E5E5", margin: "0 4px" }} />
-                  {[
-                    { icon: <Link size={15} />,   title: "Insert Link" },
-                    { icon: <Image size={15} />,  title: "Insert Image" },
-                    { icon: <Undo2 size={15} />,  title: "Undo" },
-                    { icon: <Redo2 size={15} />,  title: "Redo" },
-                  ].map(({ icon, title }) => (
-                    <button key={title} title={title} type="button"
-                      style={{ width: "28px", height: "28px", borderRadius: "4px", border: "none", background: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#525252" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "#EBEBEB")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+                      style={{ width: "28px", height: "28px", borderRadius: "4px", border: "none", background: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#525252" }}>
                       {icon}
                     </button>
                   ))}
                 </div>
-                {/* Editable body */}
                 <textarea
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
@@ -902,15 +1022,14 @@ function EmailTemplatesTab() {
                 />
               </div>
             </div>
-
-            {/* Buttons */}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", paddingTop: "4px" }}>
-              <button type="button" onClick={() => setView("list")} className="font-nunito font-bold"
-                style={{ padding: "10px 16px", borderRadius: "8px", border: "1px solid #D6D6D6", background: "#FFFFFF", fontSize: "14px", color: "#424242", cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)" }}>
+              <button type="button" onClick={() => setView("list")} disabled={saving} className="font-nunito font-bold"
+                style={{ padding: "10px 16px", borderRadius: "8px", border: "1px solid #D6D6D6", background: "#FFFFFF", fontSize: "14px", color: "#424242", cursor: saving ? "not-allowed" : "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)", opacity: saving ? 0.6 : 1 }}>
                 Cancel
               </button>
-              <button type="button" onClick={() => setView("list")} className="font-nunito font-bold"
-                style={{ padding: "10px 16px", borderRadius: "8px", border: "1px solid #F63D68", background: "#F63D68", fontSize: "14px", color: "#FFFFFF", cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)" }}>
+              <button type="button" onClick={handleSave} disabled={saving} className="font-nunito font-bold"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "10px 16px", borderRadius: "8px", border: "1px solid #F63D68", background: "#F63D68", fontSize: "14px", color: "#FFFFFF", cursor: saving ? "not-allowed" : "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)", opacity: saving ? 0.6 : 1 }}>
+                {saving && <Loader2 size={14} className="animate-spin" />}
                 Save Template
               </button>
             </div>
@@ -920,7 +1039,6 @@ function EmailTemplatesTab() {
     );
   }
 
-  // List view
   return (
     <SectionCard title="Email Templates List" action={
       <div style={{ position: "relative" }}>
@@ -933,17 +1051,25 @@ function EmailTemplatesTab() {
         />
       </div>
     }>
-      {/* Table header */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 200px 80px", gap: "12px", padding: "10px 0", borderBottom: "1px solid #F2F4F7" }}>
         {["Template Name", "Last Updated", "Action"].map((h) => (
           <span key={h} className="font-nunito font-semibold" style={{ fontSize: "12px", color: "#525252" }}>{h}</span>
         ))}
       </div>
-      {/* Rows */}
-      {filtered.map((row, i) => (
+      {loading ? (
+        <div style={{ padding: "32px 0", textAlign: "center" }}>
+          <Loader2 className="animate-spin" size={24} style={{ color: "#F63D68" }} />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ padding: "32px 0", textAlign: "center" }}>
+          <p className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#A3A3A3" }}>No templates found</p>
+        </div>
+      ) : filtered.map((row, i) => (
         <div key={row.id} style={{ display: "grid", gridTemplateColumns: "1fr 200px 80px", gap: "12px", padding: "16px 0", borderBottom: i < filtered.length - 1 ? "1px solid #F2F4F7" : "none", alignItems: "center" }}>
-          <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>{row.name}</span>
-          <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>{row.lastUpdated}</span>
+          <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#141414" }}>{row.name}</span>
+          <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>
+            {row.lastUpdated?.toDate ? row.lastUpdated.toDate().toLocaleDateString() : (row.lastUpdated || "N/A")}
+          </span>
           <div style={{ display: "flex", gap: "8px" }}>
             <button title="Edit" onClick={() => { setEditTarget(row); setTemplateName(row.name); setBody(row.body); setView("edit"); }}
               style={{ width: "32px", height: "32px", borderRadius: "8px", border: "1px solid #E5E5E5", background: "#FAFAFA", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
@@ -970,6 +1096,88 @@ const TABS: SettingsTab[] = [
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("General");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [settings, setSettings]   = useState<any>(null);
+  const [loading, setLoading]     = useState(true);
+  const [saving, setSaving]       = useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "admin"), {
+      next: (snap) => {
+        if (snap.exists()) {
+          setSettings(snap.data());
+        } else {
+          // Initial defaults if doc doesn't exist
+          setSettings({
+            language: "English",
+            currency: "USD",
+            uploadLogo: "enable",
+            filterWords: "disable",
+            features: { story: true, sdk: false, ai: true, backup: true, audio: false },
+            passwordPolicy: { minLength: "8 Characters", expiry: "Every 60 days", requireNumbers: true, requireSpecial: true },
+            permissions: {
+              "Super Admin": { Access: "Full system access", Settings: "Full Access", Stories: "Editable", Games: "Full system access", Users: "Restricted", Purchases: "Full Access", Assets: "Full system access" },
+              "Editor": { Stories: "View Only", Games: "Edit", Assets: "View Only", Users: "View Only", Purchases: "View Only", Settings: "View Only", Access: "Restricted" },
+              "Reviewer": { Stories: "Restricted", Games: "View Only", Assets: "Full Access", Users: "Edit", Purchases: "Restricted", Settings: "Restricted", Access: "Restricted" }
+            }
+          });
+        }
+        setLoading(false);
+      },
+      error: (err) => {
+        console.error("Settings listener failed:", err);
+        // Even if it fails, we should stop loading and show defaults or error
+        setSettings({
+          language: "English",
+          currency: "USD",
+          uploadLogo: "enable",
+          filterWords: "disable",
+          features: { story: true, sdk: false, ai: true, backup: true, audio: false },
+          passwordPolicy: { minLength: "8 Characters", expiry: "Every 60 days", requireNumbers: true, requireSpecial: true },
+          permissions: {
+            "Super Admin": { Access: "Full system access", Settings: "Full Access", Stories: "Editable", Games: "Full system access", Users: "Restricted", Purchases: "Full Access", Assets: "Full system access" },
+            "Editor": { Stories: "View Only", Games: "Edit", Assets: "View Only", Users: "View Only", Purchases: "View Only", Settings: "View Only", Access: "Restricted" },
+            "Reviewer": { Stories: "Restricted", Games: "View Only", Assets: "Full Access", Users: "Edit", Purchases: "Restricted", Settings: "Restricted", Access: "Restricted" }
+          }
+        });
+        setLoading(false);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const handleSaveAll = async () => {
+    if (!settings || saving) return;
+    setSaving(true);
+    try {
+      console.log("Saving all admin settings...");
+      await setDoc(doc(db, "settings", "admin"), {
+        ...settings,
+        lastUpdated: serverTimestamp(),
+      });
+      await logActivity({
+        type: "Settings",
+        activity: "Updated system settings",
+        targetName: "Admin Settings"
+      });
+      alert("Settings saved successfully!");
+    } catch (err: any) {
+      console.error("Save settings failed:", err);
+      let msg = "Failed to save settings.";
+      if (err.code === "permission-denied") {
+        msg = "Permission denied. Please ensure your Firestore rules allow writes to the 'settings' collection.";
+      } else if (err.message) {
+        msg += ` Error: ${err.message}`;
+      }
+      alert(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div style={{ padding: "60px", textAlign: "center" }} className="font-nunito">Loading settings...</div>;
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -984,14 +1192,21 @@ export default function SettingsPage() {
             Manage admin accounts, permissions, system settings, and more.
           </p>
         </div>
-        <button className="font-nunito font-bold" style={{
-          display: "inline-flex", alignItems: "center", gap: "8px",
-          padding: "10px 16px", borderRadius: "8px",
-          border: "1px solid #F63D68", background: "#F63D68",
-          fontSize: "14px", color: "#FFFFFF", cursor: "pointer",
-          boxShadow: "0px 1px 2px rgba(16,24,40,0.05)", whiteSpace: "nowrap", flexShrink: 0,
-        }}>
-          <Save size={15} /> Save Changes
+        <button 
+          onClick={handleSaveAll}
+          disabled={saving}
+          className="font-nunito font-bold" 
+          style={{
+            display: "inline-flex", alignItems: "center", gap: "8px",
+            padding: "10px 16px", borderRadius: "8px",
+            border: "1px solid #F63D68", background: "#F63D68",
+            fontSize: "14px", color: "#FFFFFF", cursor: saving ? "not-allowed" : "pointer",
+            boxShadow: "0px 1px 2px rgba(16,24,40,0.05)", whiteSpace: "nowrap", flexShrink: 0,
+            opacity: saving ? 0.7 : 1,
+            transition: "all 0.15s",
+          }}>
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+          {saving ? "Saving..." : "Save Changes"}
         </button>
       </div>
 
@@ -1016,13 +1231,13 @@ export default function SettingsPage() {
       </div>
 
       {/* Content */}
-      {activeTab === "General"          && <GeneralTab />}
-      {activeTab === "Admin Accounts"   && <AdminAccountsTab />}
-      {activeTab === "Permissions"      && <PermissionsTab />}
+      {activeTab === "General"          && <GeneralTab settings={settings} setSettings={setSettings} />}
+      {activeTab === "Admin Accounts"   && <AdminAccountsTab settings={settings} setSettings={setSettings} />}
+      {activeTab === "Permissions"      && <PermissionsTab settings={settings} setSettings={setSettings} />}
       {activeTab === "Email Templates"  && <EmailTemplatesTab />}
-      {activeTab === "Feature Toggles"  && <FeatureTogglesTab />}
-      {activeTab === "Backup & Data"    && <BackupTab />}
-      {activeTab === "Security"         && <SecurityTab />}
+      {activeTab === "Feature Toggles"  && <FeatureTogglesTab features={settings.features || {}} setFeatures={(f) => setSettings({ ...settings, features: f })} />}
+      {activeTab === "Backup & Data"    && <BackupTab settings={settings} setSettings={setSettings} />}
+      {activeTab === "Security"         && <SecurityTab settings={settings} setSettings={setSettings} />}
     </div>
   );
 }

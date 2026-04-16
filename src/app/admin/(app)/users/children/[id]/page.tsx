@@ -2,61 +2,35 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ChevronRight, Mail, Phone, Calendar, User } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ChevronRight, Mail, Calendar, User, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { db } from "@/lib/firebase";
+import { doc, getDoc, Timestamp } from "firebase/firestore";
 
-// ── Shared mock data (mirrors users/page.tsx) ─────────────────────
-
-const PARENTS = [
-  { id: "1", name: "Sarah Johnson",   email: "sarah.j@gmail.com",   phone: "+1 234 567 8901", status: "Active",   joined: "Jan 15, 2025" },
-  { id: "2", name: "Michael Chen",    email: "m.chen@gmail.com",     phone: "+1 234 567 8902", status: "Active",   joined: "Feb 03, 2025" },
-  { id: "3", name: "Emily Rodriguez", email: "emily.r@gmail.com",    phone: "+1 234 567 8903", status: "Inactive", joined: "Feb 18, 2025" },
-  { id: "4", name: "James Williams",  email: "j.williams@gmail.com", phone: "+1 234 567 8904", status: "Active",   joined: "Mar 01, 2025" },
-  { id: "5", name: "Aisha Patel",     email: "aisha.p@gmail.com",    phone: "+1 234 567 8905", status: "Active",   joined: "Mar 12, 2025" },
-  { id: "6", name: "Daniel Kim",      email: "d.kim@gmail.com",      phone: "+1 234 567 8906", status: "Inactive", joined: "Mar 20, 2025" },
-  { id: "7", name: "Laura Thompson",  email: "laura.t@gmail.com",    phone: "+1 234 567 8907", status: "Active",   joined: "Apr 02, 2025" },
-  { id: "8", name: "Omar Hassan",     email: "omar.h@gmail.com",     phone: "+1 234 567 8908", status: "Active",   joined: "Apr 10, 2025" },
-];
-
-const CHILDREN = [
-  { id: "1", name: "Emma Johnson",     age: 5, gender: "Female", parentId: "1", status: "Active",   joined: "Jan 15, 2025" },
-  { id: "2", name: "Liam Johnson",     age: 7, gender: "Male",   parentId: "1", status: "Active",   joined: "Jan 15, 2025" },
-  { id: "3", name: "Noah Chen",        age: 6, gender: "Male",   parentId: "2", status: "Active",   joined: "Feb 03, 2025" },
-  { id: "4", name: "Mia Rodriguez",    age: 4, gender: "Female", parentId: "3", status: "Inactive", joined: "Feb 18, 2025" },
-  { id: "5", name: "Sophia Rodriguez", age: 8, gender: "Female", parentId: "3", status: "Active",   joined: "Feb 18, 2025" },
-  { id: "6", name: "Lucas Williams",   age: 5, gender: "Male",   parentId: "4", status: "Active",   joined: "Mar 01, 2025" },
-  { id: "7", name: "Zara Patel",       age: 6, gender: "Female", parentId: "5", status: "Active",   joined: "Mar 12, 2025" },
-  { id: "8", name: "Aiden Kim",        age: 9, gender: "Male",   parentId: "6", status: "Inactive", joined: "Mar 20, 2025" },
-];
-
-const AVATAR_COLORS = [
-  { bg: "#FFF1F3", text: "#F63D68" },
-  { bg: "#F0F4FF", text: "#444CE7" },
-  { bg: "#ECFDF3", text: "#067647" },
-  { bg: "#FFFAEB", text: "#B54708" },
-  { bg: "#F0F9FF", text: "#026AA2" },
-  { bg: "#FDF4FF", text: "#6941C6" },
-  { bg: "#FFF7ED", text: "#C4320A" },
-  { bg: "#F0FDF4", text: "#15803D" },
-];
-
-// ── Primitives ────────────────────────────────────────────────────
-
-function Avatar({ name, size = 80, index = 0 }: { name: string; size?: number; index?: number }) {
-  const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
-  const { bg, text } = AVATAR_COLORS[index % AVATAR_COLORS.length];
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: "50%",
-      background: bg, color: text, flexShrink: 0,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: size * 0.36, fontWeight: 700, fontFamily: "Nunito, sans-serif",
-      border: "2px solid rgba(0,0,0,0.06)",
-    }}>
-      {initials}
-    </div>
-  );
+interface ChildData {
+  id: string;
+  name: string;
+  age: number;
+  gender?: string;
+  status?: string;
+  photoURL?: string;
+  joined?: string;
+  createdAt?: Timestamp;
+  parentId?: string;
 }
 
+interface ParentData {
+  id: string;
+  name?: string;
+  displayName?: string;
+  email?: string;
+  status: string;
+  photoURL?: string;
+  createdAt?: Timestamp;
+}
+
+// ── Status badge ──────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
   const active = status === "Active";
   return (
@@ -76,6 +50,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+// ── Info Row ──────────────────────────────────────────────────────
 function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -95,23 +70,67 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
 }
 
 // ── Page ──────────────────────────────────────────────────────────
-
 export default function ChildDetailPage() {
   const params = useParams();
   const id = params.id as string;
 
-  const child = CHILDREN.find((c) => c.id === id);
-  const childIndex = CHILDREN.findIndex((c) => c.id === id);
+  const [child, setChild]   = useState<ChildData | null>(null);
+  const [parent, setParent] = useState<ParentData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const parent = child ? PARENTS.find((p) => p.id === child.parentId) : null;
-  const parentIndex = parent ? PARENTS.findIndex((p) => p.id === child?.parentId) : 0;
+  useEffect(() => {
+    async function fetchData() {
+      if (!id) return;
+      setLoading(true);
+      try {
+        // Find child in the collectionGroup sub-collections
+        // Actually, since we don't have the parentId from the URL, we might need a search or the collectionGroup query.
+        // However, a common pattern is to have parentId in the URL or the child doc.
+        // If we don't know the parent, we must use a collectionGroup query to find the child by ID.
+        // Note: collectionGroup("children") requires an index for many queries, but by ID usually works on some SDKs.
+        // But the simplest is to fetch all children and find the one with this ID, OR if we had /admin/users/parents/[pid]/children/[cid].
+        
+        // For now, let's assume we can't directly getDoc on a collectionGroup without the path.
+        // We'll use a collectionGroup query.
+        const { collectionGroup, query, where, getDocs } = await import("firebase/firestore");
+        const q = query(collectionGroup(db, "children"), where("__name__", "==", id));
+        const snap = await getDocs(q);
+        
+        if (!snap.empty) {
+          const childDoc = snap.docs[0];
+          const childData = childDoc.data();
+          setChild({ id: childDoc.id, ...childData } as ChildData);
+
+          if (childData.parentId) {
+            const pDoc = await getDoc(doc(db, "users", childData.parentId));
+            if (pDoc.exists()) {
+              setParent({ id: pDoc.id, ...pDoc.data() } as ParentData);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching child details:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "300px" }}>
+        <Loader2 size={32} className="animate-spin" style={{ color: "#F63D68" }} />
+      </div>
+    );
+  }
 
   if (!child) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "300px", gap: "12px" }}>
         <p className="font-nunito font-semibold" style={{ fontSize: "18px", color: "#141414" }}>Child not found</p>
         <Link href="/admin/users" className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#F63D68", textDecoration: "none" }}>
-          ← Back to Users
+          Go Back to Users
         </Link>
       </div>
     );
@@ -133,7 +152,7 @@ export default function ChildDetailPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
-        {/* ── Child profile card ── */}
+        {/* Child profile card */}
         <div style={{
           background: "#FFFFFF", border: "1px solid #E5E5E5", borderRadius: "12px",
           padding: "24px", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
@@ -144,28 +163,31 @@ export default function ChildDetailPage() {
 
           <div style={{ display: "flex", alignItems: "flex-start", gap: "24px", flexWrap: "wrap" }}>
             {/* Avatar */}
-            <Avatar name={child.name} size={88} index={childIndex + 2} />
+            <div style={{ width: 88, height: 88, borderRadius: "50%", background: "#FFF1F3", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "32px", overflow: "hidden", position: "relative" }}>
+              {child.photoURL ? (
+                <Image src={child.photoURL} alt={child.name} fill style={{ objectFit: "cover" }} />
+              ) : "🧒"}
+            </div>
 
             {/* Details grid */}
             <div style={{ flex: 1, minWidth: "260px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-              {/* Name + status spans full width */}
               <div style={{ gridColumn: "1 / -1" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                   <span className="font-nunito font-bold" style={{ fontSize: "22px", color: "#141414" }}>
                     {child.name}
                   </span>
-                  <StatusBadge status={child.status} />
+                  <StatusBadge status={child.status || "Active"} />
                 </div>
               </div>
 
-              <InfoRow icon={User}     label="Age"         value={`${child.age} years old`} />
-              <InfoRow icon={User}     label="Gender"      value={child.gender}              />
-              <InfoRow icon={Calendar} label="Date Joined" value={child.joined}              />
+              <InfoRow icon={User}     label="Age"         value={`${child.age} Years Old`} />
+              <InfoRow icon={User}     label="Gender"      value={child.gender || "Not specified"} />
+              <InfoRow icon={Calendar} label="Date Joined" value={child.joined || (child.createdAt?.toDate ? child.createdAt.toDate().toLocaleDateString() : "N/A")} />
             </div>
           </div>
         </div>
 
-        {/* ── Parent information card ── */}
+        {/* Parent information card */}
         {parent && (
           <div style={{
             background: "#FFFFFF", border: "1px solid #E5E5E5", borderRadius: "12px",
@@ -192,24 +214,25 @@ export default function ChildDetailPage() {
             </div>
 
             <div style={{ display: "flex", alignItems: "flex-start", gap: "24px", flexWrap: "wrap" }}>
-              {/* Parent avatar */}
-              <Avatar name={parent.name} size={64} index={parentIndex} />
+               <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#F0F4FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", overflow: "hidden", position: "relative" }}>
+                {parent.photoURL ? (
+                  <Image src={parent.photoURL} alt={parent.displayName || parent.name || ""} fill style={{ objectFit: "cover" }} />
+                ) : "👨"}
+              </div>
 
               {/* Parent details grid */}
               <div style={{ flex: 1, minWidth: "260px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-                {/* Name + status */}
                 <div style={{ gridColumn: "1 / -1" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                     <span className="font-nunito font-bold" style={{ fontSize: "18px", color: "#141414" }}>
-                      {parent.name}
+                      {parent.displayName || parent.name}
                     </span>
-                    <StatusBadge status={parent.status} />
+                    <StatusBadge status={parent.status || "Active"} />
                   </div>
                 </div>
 
-                <InfoRow icon={Mail}     label="Email Address" value={parent.email}  />
-                <InfoRow icon={Phone}    label="Phone Number"  value={parent.phone}  />
-                <InfoRow icon={Calendar} label="Date Joined"   value={parent.joined} />
+                <InfoRow icon={Mail}     label="Email Address" value={parent.email || "N/A"}  />
+                <InfoRow icon={Calendar} label="Date Joined"   value={parent.createdAt?.toDate ? parent.createdAt.toDate().toLocaleDateString() : "N/A"} />
               </div>
             </div>
           </div>

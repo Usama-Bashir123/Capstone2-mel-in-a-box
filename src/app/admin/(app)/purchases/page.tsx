@@ -1,63 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Search, SlidersHorizontal, Eye,
   ChevronLeft, ChevronRight,
   TrendingUp, ShoppingCart, DollarSign, RefreshCcw,
+  Loader2
 } from "lucide-react";
+import { db } from "@/lib/firebase";
+import { collection, query, orderBy, onSnapshot, limit, Timestamp } from "firebase/firestore";
 
-// ── Mock data ─────────────────────────────────────────────────────
-const PURCHASES = [
-  { id: "1", invoice: "0313", parentName: "Sarah Lee",    item: "Jungle Bedtime Story Video",  amount: "$4.99", status: "Completed", date: "Today, 09:45 AM"    },
-  { id: "2", invoice: "3456", parentName: "Mike Brown",   item: "Space Adventure Pack",         amount: "$5.99", status: "Pending",   date: "Yesterday, 5:20PM"  },
-  { id: "3", invoice: "1243", parentName: "Aisha Khan",   item: "Remote Party Session",         amount: "$4.99", status: "Completed", date: "Yesterday, 5:20PM"  },
-  { id: "4", invoice: "2432", parentName: "David Wilson", item: "Pirate Island Activity Pack",  amount: "$5.99", status: "Refunded",  date: "Mar 14, 2025"       },
-  { id: "5", invoice: "1245", parentName: "Emma Clark",   item: "Pirate Island Activity Pack",  amount: "$4.99", status: "Completed", date: "Mar 10, 2025"       },
-  { id: "6", invoice: "2345", parentName: "Liam Taylor",  item: "Pirate Island Activity Pack",  amount: "$5.99", status: "Pending",   date: "Mar 03, 2025"       },
-  { id: "7", invoice: "1234", parentName: "David Carl",   item: "Pirate Island Activity Pack",  amount: "$4.99", status: "Completed", date: "Feb 27, 2025"       },
-  { id: "8", invoice: "5312", parentName: "Mary Jane",    item: "Pirate Island Activity Pack",  amount: "$5.99", status: "Refunded",  date: "Feb 27, 2025"       },
-];
-
-const KPI_CARDS = [
-  {
-    label:     "Total Revenue",
-    value:     "$42,590",
-    trend:     "+40% this month",
-    trendUp:   true,
-    icon:      DollarSign,
-    iconBg:    "#ECFDF3",
-    iconColor: "#067647",
-  },
-  {
-    label:     "Total Purchases",
-    value:     "3,420",
-    trend:     "+12% this month",
-    trendUp:   true,
-    icon:      ShoppingCart,
-    iconBg:    "#EFF8FF",
-    iconColor: "#1570EF",
-  },
-  {
-    label:     "Avg. Purchase Value",
-    value:     "$12.45",
-    trend:     "+8% this month",
-    trendUp:   true,
-    icon:      TrendingUp,
-    iconBg:    "#FDF4FF",
-    iconColor: "#9E77ED",
-  },
-  {
-    label:     "Refunded",
-    value:     "$1,280",
-    trend:     "-5% this month",
-    trendUp:   false,
-    icon:      RefreshCcw,
-    iconBg:    "#FEF3F2",
-    iconColor: "#F04438",
-  },
-];
+// ── Types ─────────────────────────────────────────────────────────
+interface Purchase {
+  id: string;
+  invoice: string;
+  parentName: string;
+  item: string;
+  amount: number;
+  status: "Completed" | "Pending" | "Refunded";
+  timestamp: Timestamp | null;
+  displayTime: string;
+}
 
 type StatusFilter = "All" | "Completed" | "Pending" | "Refunded";
 
@@ -84,7 +48,6 @@ function StatusBadge({ status }: { status: string }) {
     </span>
   );
 }
-
 
 // ── Segmented toggle ──────────────────────────────────────────────
 function SegmentedToggle({
@@ -121,16 +84,76 @@ function SegmentedToggle({
   );
 }
 
+const MOCK_PURCHASES: Purchase[] = [
+  { id: "1", invoice: "INV-001", parentName: "John Doe", item: "Premium Plan (Annual)", amount: 120.00, status: "Completed", timestamp: null, displayTime: "2024-03-10, 10:30 AM" },
+  { id: "2", invoice: "INV-002", parentName: "Jane Smith", item: "Adventure Pack", amount: 15.00, status: "Completed", timestamp: null, displayTime: "2024-03-12, 02:15 PM" },
+  { id: "3", invoice: "INV-003", parentName: "Robert Brown", item: "Premium Plan (Monthly)", amount: 12.00, status: "Pending", timestamp: null, displayTime: "2024-03-14, 09:45 AM" },
+  { id: "4", invoice: "INV-004", parentName: "Emily Davis", item: "Premium Plan (Annual)", amount: 120.00, status: "Completed", timestamp: null, displayTime: "2024-03-15, 11:00 AM" },
+  { id: "5", invoice: "INV-005", parentName: "Michael Wilson", item: "Adventure Pack", amount: 15.00, status: "Refunded", timestamp: null, displayTime: "2024-03-16, 04:30 PM" },
+];
+
 // ── Page ──────────────────────────────────────────────────────────
 export default function PurchasesPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [search, setSearch] = useState("");
+  const [purchases] = useState<Purchase[]>(MOCK_PURCHASES);
+  const loading = false;
 
-  const filtered = PURCHASES.filter((p) => {
+  useEffect(() => {
+    // Reverted to mock data
+  }, []);
+
+  const stats = useMemo(() => {
+    const completed = purchases.filter(p => p.status === "Completed");
+    const totalRevenue = completed.reduce((sum, p) => sum + p.amount, 0);
+    const refunded = purchases.filter(p => p.status === "Refunded").reduce((sum, p) => sum + p.amount, 0);
+    const avgValue = completed.length > 0 ? totalRevenue / completed.length : 0;
+
+    return [
+      {
+        label: "Total Revenue",
+        value: `$${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+        trend: "+40% this month", // Mock trend for now
+        trendUp: true,
+        icon: DollarSign,
+        iconBg: "#ECFDF3",
+        iconColor: "#067647",
+      },
+      {
+        label: "Total Purchases",
+        value: purchases.length.toString(),
+        trend: "+12% this month",
+        trendUp: true,
+        icon: ShoppingCart,
+        iconBg: "#EFF8FF",
+        iconColor: "#1570EF",
+      },
+      {
+        label: "Avg. Purchase Value",
+        value: `$${avgValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+        trend: "+8% this month",
+        trendUp: true,
+        icon: TrendingUp,
+        iconBg: "#FDF4FF",
+        iconColor: "#9E77ED",
+      },
+      {
+        label: "Refunded",
+        value: `$${refunded.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+        trend: "-5% this month",
+        trendUp: false,
+        icon: RefreshCcw,
+        iconBg: "#FEF3F2",
+        iconColor: "#F04438",
+      },
+    ];
+  }, [purchases]);
+
+  const filtered = purchases.filter((p) => {
     const matchSearch =
-      p.parentName.toLowerCase().includes(search.toLowerCase()) ||
-      p.item.toLowerCase().includes(search.toLowerCase()) ||
-      p.invoice.includes(search);
+      (p.parentName || "").toLowerCase().includes(search.toLowerCase()) ||
+      (p.item || "").toLowerCase().includes(search.toLowerCase()) ||
+      (p.invoice || "").toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "All" || p.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -138,7 +161,6 @@ export default function PurchasesPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
-      {/* Page header */}
       <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
         <h1 className="font-nunito font-semibold" style={{ fontSize: "30px", lineHeight: "38px", color: "#141414" }}>
           Purchases &amp; Payments
@@ -148,9 +170,8 @@ export default function PurchasesPage() {
         </p>
       </div>
 
-      {/* KPI Stat cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px" }}>
-        {KPI_CARDS.map((card) => {
+        {stats.map((card) => {
           const Icon = card.icon;
           return (
             <div
@@ -162,7 +183,6 @@ export default function PurchasesPage() {
                 display: "flex", flexDirection: "column", gap: "12px",
               }}
             >
-              {/* Label + icon row */}
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
                 <span className="font-nunito font-medium" style={{ fontSize: "14px", color: "#525252", lineHeight: "20px" }}>
                   {card.label}
@@ -176,12 +196,10 @@ export default function PurchasesPage() {
                 </div>
               </div>
 
-              {/* Value */}
               <span className="font-nunito font-semibold" style={{ fontSize: "28px", lineHeight: "38px", color: "#141414" }}>
                 {card.value}
               </span>
 
-              {/* Trend badge */}
               <span
                 className="font-nunito font-medium"
                 style={{ fontSize: "12px", color: card.trendUp ? "#067647" : "#F04438" }}
@@ -193,13 +211,11 @@ export default function PurchasesPage() {
         })}
       </div>
 
-      {/* Table card */}
       <div style={{
         background: "#FFFFFF", border: "1px solid #E5E5E5",
-        borderRadius: "12px", overflow: "hidden",
+        borderRadius: "12px", overflow: "hidden", minHeight: "500px"
       }}>
 
-        {/* Toolbar */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "16px 20px", borderBottom: "1px solid #F2F4F7",
@@ -212,7 +228,6 @@ export default function PurchasesPage() {
           />
 
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            {/* Search */}
             <div style={{ position: "relative", width: "320px" }}>
               <Search
                 size={20}
@@ -236,7 +251,6 @@ export default function PurchasesPage() {
                 }}
               />
             </div>
-            {/* Filter */}
             <button
               className="font-nunito font-bold"
               style={{
@@ -253,7 +267,6 @@ export default function PurchasesPage() {
           </div>
         </div>
 
-        {/* Table header */}
         <div style={{
           display: "grid",
           gridTemplateColumns: "80px 160px 1fr 100px 120px 175px 48px",
@@ -268,8 +281,11 @@ export default function PurchasesPage() {
           ))}
         </div>
 
-        {/* Table rows */}
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "100px" }}>
+            <Loader2 size={32} className="animate-spin" style={{ color: "#F63D68" }} />
+          </div>
+        ) : filtered.length === 0 ? (
           <div style={{ padding: "48px 20px", textAlign: "center" }}>
             <p className="font-nunito font-semibold" style={{ fontSize: "16px", color: "#141414" }}>No purchases found</p>
           </div>
@@ -284,24 +300,24 @@ export default function PurchasesPage() {
               alignItems: "center",
             }}
           >
-            <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>{row.invoice}</span>
+            <span className="font-nunito font-normal" style={{ fontSize: "14px", color: "#525252" }}>{row.invoice}</span>
 
-            <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span className="font-nunito font-normal" style={{ fontSize: "14px", color: "#525252", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {row.parentName}
             </span>
 
-            <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span className="font-nunito font-normal" style={{ fontSize: "14px", color: "#525252", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {row.item}
             </span>
 
-            <span className="font-nunito font-semibold" style={{ fontSize: "16px", color: "#141414" }}>
-              {row.amount}
+            <span className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#141414" }}>
+              ${row.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </span>
 
             <div><StatusBadge status={row.status} /></div>
 
-            <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>
-              {row.date}
+            <span className="font-nunito font-normal" style={{ fontSize: "14px", color: "#525252" }}>
+              {row.displayTime}
             </span>
 
             <Link
@@ -318,53 +334,21 @@ export default function PurchasesPage() {
           </div>
         ))}
 
-        {/* Pagination */}
-        <Pagination />
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "20px", borderTop: "1px solid #E5E5E5",
+        }}>
+          <button className="font-nunito font-bold" style={{ padding: "10px 14px", borderRadius: "8px", border: "1px solid #D6D6D6", background: "#FFFFFF", fontSize: "14px", color: "#424242" }}>
+            <ChevronLeft size={16} /> Previous
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+            <button className="font-nunito font-semibold" style={{ width: "40px", height: "40px", borderRadius: "8px", border: "none", background: "#FAFAFA", color: "#424242" }}>1</button>
+          </div>
+          <button className="font-nunito font-bold" style={{ padding: "10px 14px", borderRadius: "8px", border: "1px solid #D6D6D6", background: "#FFFFFF", fontSize: "14px", color: "#424242" }}>
+            Next <ChevronRight size={16} />
+          </button>
+        </div>
       </div>
-    </div>
-  );
-}
-
-// ── Pagination ────────────────────────────────────────────────────
-function Pagination() {
-  const edgeBtnStyle: React.CSSProperties = {
-    display: "inline-flex", alignItems: "center", gap: "6px",
-    padding: "10px 14px", borderRadius: "8px",
-    border: "1px solid #D6D6D6", background: "#FFFFFF",
-    fontSize: "14px", color: "#424242", cursor: "pointer",
-    boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
-  };
-  const pageBtn = (active: boolean): React.CSSProperties => ({
-    width: "40px", height: "40px", borderRadius: "8px", border: "none",
-    background: active ? "#FAFAFA" : "transparent",
-    color: active ? "#424242" : "#525252",
-    fontSize: "14px", cursor: "pointer",
-  });
-
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "20px", borderTop: "1px solid #E5E5E5",
-    }}>
-      <button className="font-nunito font-bold" style={edgeBtnStyle}>
-        <ChevronLeft size={16} /> Previous
-      </button>
-
-      <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-        {[1, 2, 3].map((n) => (
-          <button key={n} className="font-nunito font-semibold" style={pageBtn(n === 1)}>{n}</button>
-        ))}
-        <span className="font-nunito" style={{ width: "40px", height: "40px", fontSize: "14px", color: "#525252", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-          ...
-        </span>
-        {[8, 9, 10].map((n) => (
-          <button key={n} className="font-nunito font-semibold" style={pageBtn(false)}>{n}</button>
-        ))}
-      </div>
-
-      <button className="font-nunito font-bold" style={edgeBtnStyle}>
-        Next <ChevronRight size={16} />
-      </button>
     </div>
   );
 }

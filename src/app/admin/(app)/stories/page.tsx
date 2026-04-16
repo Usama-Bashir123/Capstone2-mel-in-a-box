@@ -1,25 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Search, SlidersHorizontal, Pencil, Trash2,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
+import { db } from "@/lib/firebase";
+import { collection, query, orderBy, onSnapshot, deleteDoc, doc, Timestamp } from "firebase/firestore";
+import Image from "next/image";
+import { logActivity } from "@/lib/activity";
 
-const ALL_STORIES = [
-  { id: "1", no: "01", title: "The Magical Jungle",  age: "3-6", status: "Published", updated: "Today, 09:45 AM" },
-  { id: "2", no: "02", title: "Space Explorer Mel",  age: "N/A", status: "Draft",     updated: "Yesterday, 5:20PM" },
-  { id: "3", no: "03", title: "The Magical Jungle",  age: "3-6", status: "Published", updated: "Yesterday, 5:20PM" },
-  { id: "4", no: "04", title: "Space Explorer Mel",  age: "4-7", status: "Draft",     updated: "Mar 14, 2025" },
-  { id: "5", no: "05", title: "The Magical Jungle",  age: "4-7", status: "Draft",     updated: "Mar 10, 2025" },
-  { id: "6", no: "06", title: "Space Explorer Mel",  age: "4-7", status: "Draft",     updated: "Mar 03, 2025" },
-  { id: "7", no: "07", title: "The Magical Jungle",  age: "4-7", status: "Published", updated: "Feb 27, 2025" },
-  { id: "8", no: "08", title: "Space Explorer Mel",  age: "4-7", status: "Published", updated: "Feb 27, 2025" },
-];
-
-const COVER_COLORS = ["#FFF1F3","#F0F4FF","#FFF1F3","#F0F4FF","#FFF1F3","#F0F4FF","#FFF1F3","#F0F4FF"];
-const COVER_EMOJI  = ["📖","🚀","📖","🚀","📖","🚀","📖","🚀"];
+interface Story {
+  id: string;
+  title: string;
+  cover?: string;
+  age: string;
+  status: "Published" | "Draft";
+  lastUpdated?: Timestamp | string;
+  createdAt?: Timestamp | string;
+}
 
 type Tab = "All" | "Active" | "Draft";
 
@@ -82,14 +82,51 @@ function EmptyState() {
 export default function StoriesPage() {
   const [activeTab, setActiveTab] = useState<Tab>("All");
   const [search, setSearch] = useState("");
+  const [stories, setStories] = useState<Story[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = ALL_STORIES.filter((s) => {
+  useEffect(() => {
+    const q = query(collection(db, "stories"), orderBy("lastUpdated", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Story));
+      setStories(list);
+      setLoading(false);
+    }, (err) => {
+      console.error("Firestore Listen Error (Stories):", err);
+      setLoading(false);
+      alert(`Failed to load stories: ${err.message}`);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const filtered = stories.filter((s) => {
     const matchTab =
       activeTab === "All"    ? true :
       activeTab === "Active" ? s.status === "Published" :
       s.status === "Draft";
-    return matchTab && s.title.toLowerCase().includes(search.toLowerCase());
+    return matchTab && (s.title || "").toLowerCase().includes(search.toLowerCase());
   });
+
+  const handleDelete = async (story: Story) => {
+    if (!window.confirm(`Are you sure you want to delete "${story.title}"?`)) return;
+    try {
+      await deleteDoc(doc(db, "stories", story.id));
+      await logActivity({
+        type: "Story",
+        activity: `Deleted story "${story.title}"`,
+        targetName: story.title
+      });
+    } catch {
+      alert("Failed to delete story.");
+    }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const formatTimestamp = (ts: any) => {
+    if (!ts) return "N/A";
+    if (ts.toDate) return ts.toDate().toLocaleString();
+    return new Date(ts).toLocaleString();
+  };
 
   const tabs: Tab[] = ["All", "Active", "Draft"];
 
@@ -179,7 +216,9 @@ export default function StoriesPage() {
         </div>
 
         {/* Table body */}
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ padding: "60px", textAlign: "center" }}>Loading stories...</div>
+        ) : filtered.length === 0 ? (
           <EmptyState />
         ) : (
           <>
@@ -214,14 +253,18 @@ export default function StoriesPage() {
                 }}
               >
                 <span className="font-nunito font-normal" style={{ fontSize: "14px", color: "#525252" }}>
-                  {story.no}
+                  {String(i + 1).padStart(2, "0")}
                 </span>
 
-                <div style={{ width: "48px", height: "48px", borderRadius: "8px", background: COVER_COLORS[i % COVER_COLORS.length], display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", border: "1px solid #E5E5E5" }}>
-                  {COVER_EMOJI[i % COVER_EMOJI.length]}
+                <div style={{ width: "48px", height: "48px", borderRadius: "8px", background: "#F5F5F5", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", border: "1px solid #E5E5E5", position: "relative" }}>
+                  {story.cover ? (
+                    <Image src={story.cover} alt={story.title} fill style={{ objectFit: "cover" }} />
+                  ) : (
+                    <span style={{ fontSize: "22px" }}>📖</span>
+                  )}
                 </div>
 
-                <span className="font-nunito font-medium" style={{ fontSize: "14px", color: "#141414" }}>
+                <span className="font-nunito font-medium" style={{ fontSize: "14px", color: "#141414", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {story.title}
                 </span>
 
@@ -229,18 +272,15 @@ export default function StoriesPage() {
                   {story.age}
                 </span>
 
-                {/* Status badge — sizes to text */}
                 <div>
                   <StatusBadge status={story.status} />
                 </div>
 
                 <span className="font-nunito font-normal" style={{ fontSize: "14px", color: "#525252" }}>
-                  {story.updated}
+                  {formatTimestamp(story.lastUpdated || story.createdAt)}
                 </span>
 
-                {/* Actions */}
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  {/* Edit — Link for reliable navigation */}
                   <Link
                     href={`/admin/stories/${story.id}/edit`}
                     title="Edit"
@@ -249,6 +289,7 @@ export default function StoriesPage() {
                     <Pencil size={16} />
                   </Link>
                   <button
+                    onClick={() => handleDelete(story)}
                     title="Delete"
                     style={{ background: "none", border: "none", padding: "4px", cursor: "pointer", display: "flex", alignItems: "center", color: "#525252" }}
                   >
@@ -258,61 +299,15 @@ export default function StoriesPage() {
               </div>
             ))}
 
-            {/* Pagination */}
+            {/* Pagination Placeholder */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderTop: "1px solid #EAECF0" }}>
-              <button
-                className="font-nunito font-semibold"
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: "6px",
-                  padding: "8px 12px", borderRadius: "8px", border: "1px solid #E5E5E5",
-                  background: "#FFFFFF", fontSize: "14px", color: "#424242",
-                  cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
-                }}
-              >
+              <button className="font-nunito font-semibold" style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "8px", border: "1px solid #E5E5E5", background: "#FFFFFF", fontSize: "14px", color: "#424242" }}>
                 <ChevronLeft size={14} /> Previous
               </button>
-
               <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                {[1, 2, 3].map((n) => (
-                  <button
-                    key={n}
-                    className="font-nunito font-semibold"
-                    style={{
-                      width: "36px", height: "36px", borderRadius: "8px",
-                      border: n === 1 ? "1px solid #F63D68" : "none",
-                      background: n === 1 ? "#FFF1F3" : "transparent",
-                      color: n === 1 ? "#F63D68" : "#525252",
-                      fontSize: "14px", cursor: "pointer",
-                    }}
-                  >
-                    {n}
-                  </button>
-                ))}
-                <span className="font-nunito" style={{ fontSize: "14px", color: "#525252", padding: "0 4px" }}>...</span>
-                {[8, 9, 10].map((n) => (
-                  <button
-                    key={n}
-                    className="font-nunito font-semibold"
-                    style={{
-                      width: "36px", height: "36px", borderRadius: "8px",
-                      border: "none", background: "transparent",
-                      color: "#525252", fontSize: "14px", cursor: "pointer",
-                    }}
-                  >
-                    {n}
-                  </button>
-                ))}
+                <button className="font-nunito font-semibold" style={{ width: "36px", height: "36px", borderRadius: "8px", border: "1px solid #F63D68", background: "#FFF1F3", color: "#F63D68" }}>1</button>
               </div>
-
-              <button
-                className="font-nunito font-semibold"
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: "6px",
-                  padding: "8px 12px", borderRadius: "8px", border: "1px solid #E5E5E5",
-                  background: "#FFFFFF", fontSize: "14px", color: "#424242",
-                  cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
-                }}
-              >
+              <button className="font-nunito font-semibold" style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "8px", border: "1px solid #E5E5E5", background: "#FFFFFF", fontSize: "14px", color: "#424242" }}>
                 Next <ChevronRight size={14} />
               </button>
             </div>

@@ -1,40 +1,37 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Search, SlidersHorizontal, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, SlidersHorizontal, Eye, ChevronLeft, ChevronRight, Slash } from "lucide-react";
+import { db } from "@/lib/firebase";
+import { collection, query, where, onSnapshot, doc, updateDoc, collectionGroup, Timestamp } from "firebase/firestore";
+import { logActivity } from "@/lib/activity";
 
-// ── Mock data (matches Figma) ─────────────────────────────────────
+interface Parent {
+  id: string;
+  name?: string;
+  displayName?: string;
+  email: string;
+  status: string;
+  createdAt?: Timestamp | Date | string;
+}
 
-const PARENTS = [
-  { id: "1", no: "01", name: "Sarah Lee",    email: "alma.lawson@example.com",    children: 2, status: "Active",  createdOn: "Today, 09:45 AM"   },
-  { id: "2", no: "02", name: "Mike Brown",   email: "sara.cruz@example.com",      children: 1, status: "Disable", createdOn: "Yesterday, 5:20PM" },
-  { id: "3", no: "03", name: "Aisha Khan",   email: "debra.holt@example.com",     children: 2, status: "Active",  createdOn: "Yesterday, 5:20PM" },
-  { id: "4", no: "04", name: "David Wilson", email: "michael.mitc@example.com",   children: 1, status: "Disable", createdOn: "Mar 14, 2025"      },
-  { id: "5", no: "05", name: "Emma Clark",   email: "kenzi.lawson@example.com",   children: 3, status: "Disable", createdOn: "Mar 10, 2025"      },
-  { id: "6", no: "06", name: "Liam Taylor",  email: "georgia.young@example.com",  children: 1, status: "Disable", createdOn: "Mar 03, 2025"      },
-  { id: "7", no: "07", name: "David Carl",   email: "nathan.roberts@example.com", children: 1, status: "Active",  createdOn: "Feb 27, 2025"      },
-  { id: "8", no: "08", name: "Mary Jane",    email: "bill.sanders@example.com",   children: 2, status: "Active",  createdOn: "Feb 27, 2025"      },
-];
+interface Child {
+  id: string;
+  parentId?: string;
+  name: string;
+  age: number;
+  status?: string;
+}
 
-const CHILDREN = [
-  { id: "1", no: "01", name: "Mia",   parentName: "Sarah Lee",    age: 4, storiesCompleted: 2, badges: 4, parentId: "1" },
-  { id: "2", no: "02", name: "Noah",  parentName: "Mike Brown",   age: 6, storiesCompleted: 1, badges: 6, parentId: "2" },
-  { id: "3", no: "03", name: "Rayan", parentName: "Aisha Khan",   age: 7, storiesCompleted: 2, badges: 7, parentId: "3" },
-  { id: "4", no: "04", name: "Hana",  parentName: "David Wilson", age: 7, storiesCompleted: 1, badges: 7, parentId: "4" },
-  { id: "5", no: "05", name: "Jacob", parentName: "Emma Clark",   age: 6, storiesCompleted: 3, badges: 6, parentId: "5" },
-  { id: "6", no: "06", name: "Zoe",   parentName: "Liam Taylor",  age: 4, storiesCompleted: 1, badges: 4, parentId: "6" },
-  { id: "7", no: "07", name: "Rayan", parentName: "David Carl",   age: 8, storiesCompleted: 1, badges: 8, parentId: "7" },
-  { id: "8", no: "08", name: "Noah",  parentName: "Mary Jane",    age: 3, storiesCompleted: 2, badges: 2, parentId: "8" },
-];
-
+// ── Types ─────────────────────────────────────────────────────────
 type MainTab      = "Parents" | "Children";
 type StatusFilter = "All" | "Active" | "Disabled";
 type AgeFilter    = "All" | "3-4" | "5-6" | "7+";
 
 // ── Status badge ──────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
-  const active = status === "Active";
+  const active = status !== "Disabled";
   return (
     <span
       className="font-nunito font-semibold"
@@ -48,7 +45,7 @@ function StatusBadge({ status }: { status: string }) {
         whiteSpace: "nowrap",
       }}
     >
-      {status}
+      {active ? "Active" : "Disabled"}
     </span>
   );
 }
@@ -95,22 +92,56 @@ export default function UsersPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [ageFilter,    setAgeFilter]    = useState<AgeFilter>("All");
   const [search,       setSearch]       = useState("");
+  
+  const [parents, setParents] = useState<Parent[]>([]);
+  const [children, setChildren] = useState<Child[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const mainTabs: MainTab[] = ["Parents", "Children"];
 
-  const filteredParents = PARENTS.filter((p) => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.email.toLowerCase().includes(search.toLowerCase());
+  useEffect(() => {
+    setLoading(true);
+    // Real-time listener for parents
+    const parentsQuery = query(collection(db, "users"), where("role", "==", "parents"));
+    const unsubscribeParents = onSnapshot(parentsQuery, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Parent));
+      setParents(data);
+      if (activeTab === "Parents") setLoading(false);
+    });
+
+    // Real-time listener for children
+    const childrenQuery = query(collectionGroup(db, "children"));
+    const unsubscribeChildren = onSnapshot(childrenQuery, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        parentId: doc.ref.parent.parent?.id, 
+        ...doc.data() 
+      } as Child));
+      setChildren(data);
+      if (activeTab === "Children") setLoading(false);
+    });
+
+    return () => {
+      unsubscribeParents();
+      unsubscribeChildren();
+    };
+  }, [activeTab]);
+
+  const filteredParents = parents.filter((p) => {
+    const name = (p.displayName || p.name || "").toLowerCase();
+    const email = (p.email || "").toLowerCase();
+    const matchSearch = name.includes(search.toLowerCase()) || email.includes(search.toLowerCase());
     const matchStatus =
       statusFilter === "All" ||
-      (statusFilter === "Active"   && p.status === "Active")  ||
-      (statusFilter === "Disabled" && p.status === "Disable");
+      (statusFilter === "Active"   && p.status !== "Disabled")  ||
+      (statusFilter === "Disabled" && p.status === "Disabled");
     return matchSearch && matchStatus;
   });
 
-  const filteredChildren = CHILDREN.filter((c) => {
-    const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.parentName.toLowerCase().includes(search.toLowerCase());
+  const filteredChildren = children.filter((c) => {
+    const name = (c.name || "").toLowerCase();
+    const parentName = parents.find(p => p.id === c.parentId)?.displayName || "Unknown Parent";
+    const matchSearch = name.includes(search.toLowerCase()) || parentName.toLowerCase().includes(search.toLowerCase());
     const matchAge =
       ageFilter === "All" ||
       (ageFilter === "3-4" && c.age >= 3 && c.age <= 4) ||
@@ -119,11 +150,40 @@ export default function UsersPage() {
     return matchSearch && matchAge;
   });
 
+  const handleToggleStatus = async (user: Parent, e: React.MouseEvent) => {
+    e.preventDefault();
+    const newStatus = user.status === "Disabled" ? "Active" : "Disabled";
+    const action = newStatus === "Disabled" ? "disable" : "enable";
+    if (!window.confirm(`Are you sure you want to ${action} ${user.displayName || user.name || "this user"}'s account?`)) return;
+    
+    try {
+      await updateDoc(doc(db, "users", user.id), { status: newStatus });
+      await logActivity({
+        type: "Parent",
+        activity: `${action === "disable" ? "Disabled" : "Enabled"} account for "${user.displayName || user.name}"`,
+        targetName: user.displayName || user.name,
+        changes: [`Status changed to ${newStatus}`]
+      });
+    } catch (err) {
+      console.error("Error updating status:", err);
+      alert("Failed to update status.");
+    }
+  };
+
+  // Tab handling
+
   const handleTabChange = (tab: MainTab) => {
     setActiveTab(tab);
     setSearch("");
     setStatusFilter("All");
     setAgeFilter("All");
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const formatTimestamp = (ts: any) => {
+    if (!ts) return "N/A";
+    if (ts.toDate) return ts.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return new Date(ts).toLocaleDateString();
   };
 
   return (
@@ -139,7 +199,6 @@ export default function UsersPage() {
         </p>
       </div>
 
-      {/* Parents / Children tab bar — outside the card */}
       <div style={{
         display: "inline-flex", alignSelf: "flex-start",
         background: "#FAFAFA", borderRadius: "10px", padding: "4px", gap: "4px",
@@ -170,13 +229,11 @@ export default function UsersPage() {
         })}
       </div>
 
-      {/* Table card */}
       <div style={{
         background: "#FFFFFF", border: "1px solid #E5E5E5",
         borderRadius: "12px", overflow: "hidden",
       }}>
 
-        {/* Card toolbar: status/age toggle (left) | search + filter (right) */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "16px 20px", borderBottom: "1px solid #F2F4F7",
@@ -197,7 +254,6 @@ export default function UsersPage() {
           )}
 
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            {/* Search */}
             <div style={{ position: "relative", width: "320px" }}>
               <Search
                 size={20}
@@ -221,7 +277,6 @@ export default function UsersPage() {
                 }}
               />
             </div>
-            {/* Filter button */}
             <button
               className="font-nunito font-bold"
               style={{
@@ -238,13 +293,11 @@ export default function UsersPage() {
           </div>
         </div>
 
-        {/* ── PARENTS TABLE ─────────────────────────────────────────── */}
         {activeTab === "Parents" && (
           <>
-            {/* Header row */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "44px 1fr 1fr 100px 110px 175px 48px",
+              gridTemplateColumns: "44px 1fr 1fr 100px 110px 175px 80px",
               padding: "14px 20px", background: "#FAFAFA",
               borderBottom: "1px solid #F2F4F7",
               gap: "12px", alignItems: "center",
@@ -256,8 +309,11 @@ export default function UsersPage() {
               ))}
             </div>
 
-            {/* Data rows */}
-            {filteredParents.length === 0 ? (
+            {loading ? (
+              <div style={{ padding: "48px 20px", textAlign: "center" }}>
+                <p className="font-nunito font-semibold" style={{ fontSize: "16px", color: "#141414" }}>Loading parents...</p>
+              </div>
+            ) : filteredParents.length === 0 ? (
               <div style={{ padding: "48px 20px", textAlign: "center" }}>
                 <p className="font-nunito font-semibold" style={{ fontSize: "16px", color: "#141414" }}>No parents found</p>
               </div>
@@ -266,43 +322,51 @@ export default function UsersPage() {
                 key={parent.id}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "44px 1fr 1fr 100px 110px 175px 48px",
+                  gridTemplateColumns: "44px 1fr 1fr 100px 110px 175px 80px",
                   padding: "16px 20px", background: "#FFFFFF", gap: "12px",
                   borderBottom: i < filteredParents.length - 1 ? "1px solid #EAECF0" : "none",
                   alignItems: "center",
                 }}
               >
-                <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>{parent.no}</span>
-
+                <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>{String(i + 1).padStart(2, "0")}</span>
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {parent.name}
+                  {parent.displayName || parent.name || "N/A"}
                 </span>
-
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {parent.email}
                 </span>
-
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>
-                  {parent.children}
+                  {children.filter(c => c.parentId === parent.id).length}
                 </span>
-
                 <div><StatusBadge status={parent.status} /></div>
-
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>
-                  {parent.createdOn}
+                  {formatTimestamp(parent.createdAt)}
                 </span>
-
-                <Link
-                  href={`/admin/users/parents/${parent.id}`}
-                  style={{
-                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    width: "32px", height: "32px", borderRadius: "8px",
-                    border: "1px solid #E5E5E5", background: "#FFFFFF", color: "#525252",
-                    textDecoration: "none", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
-                  }}
-                >
-                  <Eye size={15} />
-                </Link>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={(e) => handleToggleStatus(parent, e)}
+                    style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "32px", height: "32px", borderRadius: "8px",
+                      border: "1px solid #E5E5E5", background: "#FFFFFF", color: parent.status === "Disabled" ? "#067647" : "#F04438",
+                      cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+                    }}
+                    title={parent.status === "Disabled" ? "Enable Account" : "Disable Account"}
+                  >
+                    <Slash size={15} />
+                  </button>
+                  <Link
+                    href={`/admin/users/parents/${parent.id}`}
+                    style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "32px", height: "32px", borderRadius: "8px",
+                      border: "1px solid #E5E5E5", background: "#FFFFFF", color: "#525252",
+                      textDecoration: "none", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+                    }}
+                  >
+                    <Eye size={15} />
+                  </Link>
+                </div>
               </div>
             ))}
 
@@ -310,10 +374,8 @@ export default function UsersPage() {
           </>
         )}
 
-        {/* ── CHILDREN TABLE ────────────────────────────────────────── */}
         {activeTab === "Children" && (
           <>
-            {/* Header row */}
             <div style={{
               display: "grid",
               gridTemplateColumns: "44px 1fr 1fr 60px 160px 80px 48px",
@@ -328,8 +390,11 @@ export default function UsersPage() {
               ))}
             </div>
 
-            {/* Data rows */}
-            {filteredChildren.length === 0 ? (
+            {loading ? (
+              <div style={{ padding: "48px 20px", textAlign: "center" }}>
+                <p className="font-nunito font-semibold" style={{ fontSize: "16px", color: "#141414" }}>Loading children...</p>
+              </div>
+            ) : filteredChildren.length === 0 ? (
               <div style={{ padding: "48px 20px", textAlign: "center" }}>
                 <p className="font-nunito font-semibold" style={{ fontSize: "16px", color: "#141414" }}>No children found</p>
               </div>
@@ -344,28 +409,22 @@ export default function UsersPage() {
                   alignItems: "center",
                 }}
               >
-                <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>{child.no}</span>
-
+                <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>{String(i + 1).padStart(2, "0")}</span>
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {child.name}
                 </span>
-
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {child.parentName}
+                  {parents.find(p => p.id === child.parentId)?.displayName || "Unknown Parent"}
                 </span>
-
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>
                   {child.age}
                 </span>
-
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>
-                  {child.storiesCompleted}
+                  2
                 </span>
-
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>
-                  {child.badges}
+                  4
                 </span>
-
                 <Link
                   href={`/admin/users/children/${child.id}`}
                   style={{
@@ -390,13 +449,6 @@ export default function UsersPage() {
 
 // ── Pagination ────────────────────────────────────────────────────
 function Pagination() {
-  const pageBtnStyle = (active: boolean) => ({
-    width: "40px", height: "40px", borderRadius: "8px", border: "none",
-    background: active ? "#FAFAFA" : "transparent",
-    color: active ? "#424242" : "#525252",
-    fontSize: "14px", cursor: "pointer",
-  } as React.CSSProperties);
-
   const edgeBtnStyle: React.CSSProperties = {
     display: "inline-flex", alignItems: "center", gap: "6px",
     padding: "10px 14px", borderRadius: "8px",
@@ -410,25 +462,14 @@ function Pagination() {
       display: "flex", alignItems: "center", justifyContent: "space-between",
       padding: "20px 20px", borderTop: "1px solid #E5E5E5",
     }}>
-      {/* Previous — left edge */}
       <button className="font-nunito font-bold" style={edgeBtnStyle}>
         <ChevronLeft size={16} /> Previous
       </button>
 
-      {/* Page numbers — centre */}
       <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-        {[1, 2, 3].map((n) => (
-          <button key={n} className="font-nunito font-semibold" style={pageBtnStyle(n === 1)}>{n}</button>
-        ))}
-        <span className="font-nunito" style={{ width: "40px", height: "40px", fontSize: "14px", color: "#525252", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-          ...
-        </span>
-        {[8, 9, 10].map((n) => (
-          <button key={n} className="font-nunito font-semibold" style={pageBtnStyle(false)}>{n}</button>
-        ))}
+        <button className="font-nunito font-semibold" style={{ width: "40px", height: "40px", borderRadius: "8px", border: "none", background: "#FAFAFA", color: "#424242", fontSize: "14px", cursor: "pointer" }}>1</button>
       </div>
 
-      {/* Next — right edge */}
       <button className="font-nunito font-bold" style={edgeBtnStyle}>
         Next <ChevronRight size={16} />
       </button>

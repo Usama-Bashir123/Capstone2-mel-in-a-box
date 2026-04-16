@@ -1,85 +1,42 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { ChevronRight, Trash2, BookOpen } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { ChevronRight, Trash2, BookOpen, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { db } from "@/lib/firebase";
+import { doc, getDoc, collection, getDocs, updateDoc, deleteDoc, query, where, Timestamp } from "firebase/firestore";
+import { logActivity } from "@/lib/activity";
 
-// ── Mock data ─────────────────────────────────────────────────────
+interface ParentData {
+  id: string;
+  name?: string;
+  displayName?: string;
+  email?: string;
+  status: string;
+  createdAt?: Timestamp | Date | string;
+}
 
-const PARENTS = [
-  { id: "1", name: "Sarah Lee",    email: "alma.lawson@example.com",    status: "Active",  createdOn: "Today, 9:12 AM"    },
-  { id: "2", name: "Mike Brown",   email: "sara.cruz@example.com",      status: "Disable", createdOn: "Yesterday, 5:20PM" },
-  { id: "3", name: "Aisha Khan",   email: "debra.holt@example.com",     status: "Active",  createdOn: "Yesterday, 5:20PM" },
-  { id: "4", name: "David Wilson", email: "michael.mitc@example.com",   status: "Disable", createdOn: "Mar 14, 2025"      },
-  { id: "5", name: "Emma Clark",   email: "kenzi.lawson@example.com",   status: "Disable", createdOn: "Mar 10, 2025"      },
-  { id: "6", name: "Liam Taylor",  email: "georgia.young@example.com",  status: "Disable", createdOn: "Mar 03, 2025"      },
-  { id: "7", name: "David Carl",   email: "nathan.roberts@example.com", status: "Active",  createdOn: "Feb 27, 2025"      },
-  { id: "8", name: "Mary Jane",    email: "bill.sanders@example.com",   status: "Active",  createdOn: "Feb 27, 2025"      },
-];
+interface ChildData {
+  id: string;
+  name: string;
+  gender?: string;
+  age?: number;
+  photoURL?: string;
+}
 
-const CHILDREN: Record<string, Array<{
-  name: string; age: number; storiesCompleted: number; badges: number;
-}>> = {
-  "1": [
-    { name: "Mia",  age: 4, storiesCompleted: 2, badges: 5 },
-    { name: "Noah", age: 6, storiesCompleted: 4, badges: 6 },
-  ],
-  "2": [{ name: "Noah",  age: 6, storiesCompleted: 1, badges: 6 }],
-  "3": [
-    { name: "Rayan", age: 7, storiesCompleted: 2, badges: 7 },
-    { name: "Hana",  age: 5, storiesCompleted: 3, badges: 5 },
-  ],
-  "4": [{ name: "Hana",  age: 7, storiesCompleted: 1, badges: 7 }],
-  "5": [
-    { name: "Jacob", age: 6, storiesCompleted: 3, badges: 6 },
-    { name: "Lily",  age: 4, storiesCompleted: 1, badges: 3 },
-    { name: "Sam",   age: 8, storiesCompleted: 2, badges: 8 },
-  ],
-  "6": [{ name: "Zoe",   age: 4, storiesCompleted: 1, badges: 4 }],
-  "7": [{ name: "Rayan", age: 8, storiesCompleted: 1, badges: 8 }],
-  "8": [
-    { name: "Noah", age: 3, storiesCompleted: 2, badges: 2 },
-    { name: "Mia",  age: 5, storiesCompleted: 1, badges: 3 },
-  ],
-};
+interface PurchaseData {
+  id: string;
+  item: string;
+  amount: number;
+  timestamp?: Timestamp | Date | string;
+  displayTime?: string;
+}
 
-type PurchaseItem = { no: string; title: string; price: string; coverTop: string; coverBottom: string };
-const PURCHASE_HISTORY: Record<string, PurchaseItem[]> = {
-  "1": [
-    { no: "01", title: "The Magical Jungle",  price: "$4.99", coverTop: "#4ADE80", coverBottom: "#166534" },
-    { no: "02", title: "Space Explorer Mel",  price: "$2.99", coverTop: "#60A5FA", coverBottom: "#1E3A8A" },
-  ],
-  "2": [
-    { no: "01", title: "Ocean Adventure",     price: "$3.99", coverTop: "#38BDF8", coverBottom: "#0C4A6E" },
-  ],
-  "3": [
-    { no: "01", title: "The Magical Jungle",  price: "$4.99", coverTop: "#4ADE80", coverBottom: "#166534" },
-    { no: "02", title: "Desert Safari Mel",   price: "$3.49", coverTop: "#FBBF24", coverBottom: "#92400E" },
-  ],
-  "4": [
-    { no: "01", title: "Space Explorer Mel",  price: "$2.99", coverTop: "#60A5FA", coverBottom: "#1E3A8A" },
-  ],
-  "5": [
-    { no: "01", title: "The Magical Jungle",  price: "$4.99", coverTop: "#4ADE80", coverBottom: "#166534" },
-    { no: "02", title: "Ocean Adventure",     price: "$3.99", coverTop: "#38BDF8", coverBottom: "#0C4A6E" },
-    { no: "03", title: "Space Explorer Mel",  price: "$2.99", coverTop: "#60A5FA", coverBottom: "#1E3A8A" },
-  ],
-  "6": [
-    { no: "01", title: "Desert Safari Mel",   price: "$3.49", coverTop: "#FBBF24", coverBottom: "#92400E" },
-  ],
-  "7": [
-    { no: "01", title: "The Magical Jungle",  price: "$4.99", coverTop: "#4ADE80", coverBottom: "#166534" },
-  ],
-  "8": [
-    { no: "01", title: "Space Explorer Mel",  price: "$2.99", coverTop: "#60A5FA", coverBottom: "#1E3A8A" },
-    { no: "02", title: "Ocean Adventure",     price: "$3.99", coverTop: "#38BDF8", coverBottom: "#0C4A6E" },
-  ],
-};
-
-// ── Primitives ────────────────────────────────────────────────────
-
+// ── Status badge ──────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
-  const active = status === "Active";
+  const active = status !== "Disabled";
   return (
     <span
       className="font-nunito font-semibold"
@@ -93,227 +50,12 @@ function StatusBadge({ status }: { status: string }) {
         whiteSpace: "nowrap",
       }}
     >
-      {status}
+      {active ? "Active" : "Disabled"}
     </span>
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────
-
-export default function ParentDetailPage() {
-  const params = useParams();
-  const id = params.id as string;
-
-  const parent   = PARENTS.find((p) => p.id === id);
-  const children = CHILDREN[id] ?? [];
-  const purchases = PURCHASE_HISTORY[id] ?? [];
-
-  if (!parent) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "300px", gap: "12px" }}>
-        <p className="font-nunito font-semibold" style={{ fontSize: "18px", color: "#141414" }}>Parent not found</p>
-        <Link href="/admin/users" className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#F63D68", textDecoration: "none" }}>
-          ← Back to Users
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-
-      {/* Breadcrumb + Action buttons row */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
-        {/* Breadcrumb */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <Link
-            href="/admin/users"
-            className="font-nunito font-bold"
-            style={{ fontSize: "14px", color: "#424242", textDecoration: "none" }}
-          >
-            Users
-          </Link>
-          <ChevronRight size={16} style={{ color: "#A3A3A3", flexShrink: 0 }} />
-          <span className="font-nunito font-bold" style={{ fontSize: "14px", color: "#F63D68" }}>
-            {parent.name}
-          </span>
-        </div>
-
-        {/* Action buttons */}
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          {/* Delete (trash icon only) */}
-          <button
-            style={{
-              width: "40px", height: "40px", borderRadius: "8px",
-              border: "1px solid #FECDCA", background: "#FEF3F2",
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
-              flexShrink: 0,
-            }}
-          >
-            <Trash2 size={16} style={{ color: "#F04438" }} />
-          </button>
-
-          {/* Disable Account */}
-          <button
-            className="font-nunito font-bold"
-            style={{
-              padding: "10px 14px", borderRadius: "8px",
-              border: "1px solid #D6D6D6", background: "#FFFFFF",
-              fontSize: "14px", color: "#424242", cursor: "pointer",
-              boxShadow: "0px 1px 2px rgba(16,24,40,0.05)", whiteSpace: "nowrap",
-            }}
-          >
-            Disable Account
-          </button>
-
-          {/* Reset Password */}
-          <button
-            className="font-nunito font-bold"
-            style={{
-              padding: "10px 14px", borderRadius: "8px",
-              border: "1px solid #F63D68", background: "#F63D68",
-              fontSize: "14px", color: "#FFFFFF", cursor: "pointer",
-              boxShadow: "0px 1px 2px rgba(16,24,40,0.05)", whiteSpace: "nowrap",
-            }}
-          >
-            Reset Password
-          </button>
-        </div>
-      </div>
-
-      {/* ── Card stack ─────────────────────────────────────────────── */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-
-        {/* 1. Parents Information */}
-        <div style={{
-          background: "#FFFFFF", border: "1px solid #E5E5E5",
-          borderRadius: "12px", padding: "20px",
-          boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
-        }}>
-          <h3 className="font-nunito font-semibold" style={{ fontSize: "18px", lineHeight: "28px", color: "#141414", margin: "0 0 24px 0" }}>
-            Parents Information
-          </h3>
-
-          {/* 2-column field grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-            <FieldItem label="Name"            value={parent.name}       />
-            <FieldItem label="Email Address"   value={parent.email}      />
-            <FieldItem label="Account Created" value={parent.createdOn}  />
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-start" }}>
-              <span className="font-nunito" style={{ fontWeight: 500, fontSize: "14px", color: "#424242" }}>Status</span>
-              <StatusBadge status={parent.status} />
-            </div>
-          </div>
-        </div>
-
-        {/* 2. Child Profiles */}
-        <div style={{
-          background: "#FFFFFF", border: "1px solid #E5E5E5",
-          borderRadius: "12px", padding: "20px",
-          boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
-        }}>
-          <h3 className="font-nunito font-semibold" style={{ fontSize: "18px", lineHeight: "28px", color: "#141414", margin: "0 0 24px 0" }}>
-            Child Profiles
-          </h3>
-
-          {children.length === 0 ? (
-            <p className="font-nunito font-normal" style={{ fontSize: "14px", color: "#A3A3A3" }}>
-              No children linked to this parent.
-            </p>
-          ) : (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "24px" }}>
-              {children.map((child, i) => (
-                <div
-                  key={i}
-                  style={{
-                    background: "#FAFAFA", borderRadius: "12px",
-                    padding: "16px", minWidth: "200px", flex: "1",
-                    display: "flex", flexDirection: "column", gap: "20px",
-                  }}
-                >
-                  <FieldItem label="Name"              value={child.name}                          />
-                  <FieldItem label="Age"               value={`${child.age} Years`}               />
-                  <FieldItem label="Stories Completed" value={`${child.storiesCompleted} Stories`} />
-                  <FieldItem label="Badges"            value={`${child.badges} Badges`}           />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 3. Purchase History */}
-        <div style={{
-          background: "#FFFFFF", border: "1px solid #E5E5E5",
-          borderRadius: "12px", padding: "20px",
-          boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
-        }}>
-          <h3 className="font-nunito font-semibold" style={{ fontSize: "18px", lineHeight: "28px", color: "#141414", margin: "0 0 24px 0" }}>
-            Purchase History
-          </h3>
-
-          {purchases.length === 0 ? (
-            <p className="font-nunito font-normal" style={{ fontSize: "14px", color: "#A3A3A3" }}>
-              No purchases yet.
-            </p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {purchases.map((item) => (
-                <div
-                  key={item.no}
-                  style={{
-                    background: "#FAFAFA", borderRadius: "12px", padding: "12px",
-                    display: "flex", alignItems: "center",
-                    justifyContent: "space-between", gap: "16px",
-                  }}
-                >
-                  {/* Left: index + book cover widget + title */}
-                  <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-                    <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#141414", minWidth: "24px" }}>
-                      {item.no}
-                    </span>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                      {/* Book cover widget */}
-                      <div style={{
-                        width: "36px", height: "48px", borderRadius: "6px", flexShrink: 0,
-                        background: `linear-gradient(160deg, ${item.coverTop} 0%, ${item.coverBottom} 100%)`,
-                        border: "0.5px solid rgba(0,0,0,0.10)",
-                        boxShadow: "2px 2px 6px rgba(0,0,0,0.12)",
-                        position: "relative", overflow: "hidden",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>
-                        {/* Spine line */}
-                        <div style={{
-                          position: "absolute", left: "7px", top: 0, bottom: 0,
-                          width: "1px", background: "rgba(255,255,255,0.25)",
-                        }} />
-                        {/* Book icon */}
-                        <BookOpen size={14} style={{ color: "rgba(255,255,255,0.85)", flexShrink: 0 }} />
-                      </div>
-
-                      <span className="font-nunito font-semibold" style={{ fontSize: "16px", color: "#141414" }}>
-                        {item.title}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Right: price */}
-                  <span className="font-nunito" style={{ fontWeight: 500, fontSize: "16px", color: "#17B26A", whiteSpace: "nowrap" }}>
-                    {item.price}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-      </div>
-    </div>
-  );
-}
-
-// ── Field label + value pair ──────────────────────────────────────
+// ── Field Item ──────────────────────────────────────────────────
 function FieldItem({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -323,6 +65,250 @@ function FieldItem({ label, value }: { label: string; value: string }) {
       <span className="font-nunito font-semibold" style={{ fontSize: "16px", color: "#141414" }}>
         {value}
       </span>
+    </div>
+  );
+}
+
+// ── Page ────────────────────────────────────────────────────────
+export default function ParentDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params.id as string;
+
+  const [parent, setParent] = useState<ParentData | null>(null);
+  const [children, setChildren] = useState<ChildData[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      if (!id) return;
+      setLoading(true);
+      try {
+        // Fetch parent doc
+        const parentDoc = await getDoc(doc(db, "users", id));
+        if (parentDoc.exists()) {
+          const data = parentDoc.data();
+          setParent({ id: parentDoc.id, ...data } as ParentData);
+
+          // Fetch children
+          const childrenSnap = await getDocs(collection(db, "users", id, "children"));
+          setChildren(childrenSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChildData)));
+
+          // Fetch purchases (query by parentName or parentId if available)
+          const purchasesQuery = query(collection(db, "purchases"), where("parentName", "==", data.displayName || data.name || ""));
+          const purchasesSnap = await getDocs(purchasesQuery);
+          setPurchases(purchasesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PurchaseData)));
+        }
+      } catch (err) {
+        console.error("Error fetching parent details:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [id]);
+
+  const handleToggleStatus = async () => {
+    if (!parent) return;
+    const newStatus = parent.status === "Disabled" ? "Active" : "Disabled";
+    const action = newStatus === "Disabled" ? "disable" : "enable";
+    if (!window.confirm(`Are you sure you want to ${action} ${parent.displayName || parent.name || "this user"}'s account?`)) return;
+
+    try {
+      await updateDoc(doc(db, "users", id), { status: newStatus });
+      setParent({ ...parent, status: newStatus });
+      await logActivity({
+        type: "Parent",
+        activity: `${action === "disable" ? "Disabled" : "Enabled"} account for "${parent.displayName || parent.name}"`,
+        targetName: parent.displayName || parent.name,
+        changes: [`Status changed to ${newStatus}`]
+      });
+    } catch (err) {
+      console.error("Error updating status:", err);
+      alert("Failed to update status.");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!parent) return;
+    if (!window.confirm(`CRITICAL: Are you sure you want to PERMANENTLY delete ${parent.displayName || parent.name}'s account? This cannot be undone.`)) return;
+
+    try {
+      await deleteDoc(doc(db, "users", id));
+      await logActivity({
+        type: "Parent",
+        activity: `Deleted account for "${parent.displayName || parent.name}"`,
+        targetName: parent.displayName || parent.name
+      });
+      router.push("/admin/users");
+    } catch (err) {
+      console.error("Error deleting user:", err);
+      alert("Failed to delete user.");
+    }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const formatTimestamp = (ts: any) => {
+    if (!ts) return "N/A";
+    if (ts.toDate) return ts.toDate().toLocaleDateString();
+    return new Date(ts).toLocaleDateString();
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "200px" }}>
+        <Loader2 className="animate-spin" size={32} style={{ color: "#F63D68" }} />
+      </div>
+    );
+  }
+
+  if (!parent) {
+    return (
+      <div style={{ padding: "40px", textAlign: "center" }}>
+        <h2 className="font-nunito">Parent not found</h2>
+        <Link href="/admin/users" style={{ color: "#F63D68", textDecoration: "none" }}>Go back to Users</Link>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "20px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <Link href="/admin/users" className="font-nunito font-bold" style={{ fontSize: "14px", color: "#424242", textDecoration: "none" }}>
+            Users
+          </Link>
+          <ChevronRight size={16} style={{ color: "#A3A3A3", flexShrink: 0 }} />
+          <span className="font-nunito font-bold" style={{ fontSize: "14px", color: "#F63D68" }}>
+            {parent.displayName || parent.name}
+          </span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <button
+            onClick={handleDelete}
+            style={{
+              width: "40px", height: "40px", borderRadius: "8px",
+              border: "1px solid #FECDCA", background: "#FEF3F2",
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+            }}
+          >
+            <Trash2 size={16} style={{ color: "#F04438" }} />
+          </button>
+
+          <button
+            onClick={handleToggleStatus}
+            className="font-nunito font-bold"
+            style={{
+              padding: "10px 14px", borderRadius: "8px",
+              border: "1px solid #D6D6D6", background: "#FFFFFF",
+              fontSize: "14px", color: "#424242", cursor: "pointer",
+              boxShadow: "0px 1px 2px rgba(16,24,40,0.05)", whiteSpace: "nowrap",
+            }}
+          >
+            {parent.status === "Disabled" ? "Enable Account" : "Disable Account"}
+          </button>
+        </div>
+      </div>
+
+      {/* Info Sections */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        
+        {/* Parent Info Card */}
+        <div style={{
+          background: "#FFFFFF", border: "1px solid #E5E5E5", borderRadius: "12px", padding: "20px",
+          boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+        }}>
+          <h3 className="font-nunito font-semibold" style={{ fontSize: "18px", color: "#141414", margin: "0 0 24px 0" }}>
+            Personal Information
+          </h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "20px" }}>
+            <FieldItem label="Full Name" value={parent.displayName || parent.name || "N/A"} />
+            <FieldItem label="Email Address" value={parent.email || "N/A"} />
+            <FieldItem label="Created At" value={formatTimestamp(parent.createdAt)} />
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <span className="font-nunito" style={{ fontWeight: 500, fontSize: "14px", color: "#424242" }}>Status</span>
+              <StatusBadge status={parent.status} />
+            </div>
+          </div>
+        </div>
+
+        {/* Children Info Card */}
+        <div style={{
+          background: "#FFFFFF", border: "1px solid #E5E5E5", borderRadius: "12px", padding: "20px",
+          boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+        }}>
+          <h3 className="font-nunito font-semibold" style={{ fontSize: "18px", color: "#141414", margin: "0 0 24px 0" }}>
+            Children Profiles
+          </h3>
+          {children.length === 0 ? (
+            <p className="font-nunito" style={{ fontSize: "14px", color: "#737373" }}>No children profiles for this parent.</p>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
+              {children.map(child => (
+                <div key={child.id} style={{ padding: "16px", border: "1px solid #F2F4F7", borderRadius: "8px", background: "#FAFAFA" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+                    <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#FFF1F3", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", position: "relative", overflow: "hidden" }}>
+                      {child.photoURL ? (
+                        <Image src={child.photoURL} alt={child.name} fill style={{ objectFit: "cover" }} />
+                      ) : "🧒"}
+                    </div>
+                    <div>
+                      <h4 className="font-nunito font-bold" style={{ fontSize: "16px", color: "#141414", margin: 0 }}>{child.name}</h4>
+                      <p className="font-nunito" style={{ fontSize: "12px", color: "#737373", margin: 0 }}>{child.gender} • {child.age} yrs</p>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <div style={{ padding: "8px", background: "#FFFFFF", borderRadius: "6px", border: "1px solid #EAECF0" }}>
+                      <p className="font-nunito" style={{ fontSize: "10px", color: "#737373", margin: 0 }}>STORIES</p>
+                      <p className="font-nunito font-bold" style={{ fontSize: "14px", color: "#141414", margin: 0 }}>0</p>
+                    </div>
+                    <div style={{ padding: "8px", background: "#FFFFFF", borderRadius: "6px", border: "1px solid #EAECF0" }}>
+                      <p className="font-nunito" style={{ fontSize: "10px", color: "#737373", margin: 0 }}>GAMES</p>
+                      <p className="font-nunito font-bold" style={{ fontSize: "14px", color: "#141414", margin: 0 }}>0</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Purchases Card */}
+        <div style={{
+          background: "#FFFFFF", border: "1px solid #E5E5E5", borderRadius: "12px", padding: "20px",
+          boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+        }}>
+          <h3 className="font-nunito font-semibold" style={{ fontSize: "18px", color: "#141414", margin: "0 0 24px 0" }}>
+            Recent Purchases
+          </h3>
+          {purchases.length === 0 ? (
+            <p className="font-nunito" style={{ fontSize: "14px", color: "#737373" }}>No purchase history found.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {purchases.map(p => (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px", background: "#FAFAFA", borderRadius: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ width: "32px", height: "32px", borderRadius: "6px", background: "#EFF8FF", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <BookOpen size={16} style={{ color: "#1570EF" }} />
+                    </div>
+                    <div>
+                      <p className="font-nunito font-bold" style={{ fontSize: "14px", color: "#141414", margin: 0 }}>{p.item}</p>
+                      <p className="font-nunito" style={{ fontSize: "12px", color: "#737373", margin: 0 }}>{p.displayTime || formatTimestamp(p.timestamp)}</p>
+                    </div>
+                  </div>
+                  <p className="font-nunito font-bold" style={{ fontSize: "16px", color: "#067647" }}>${p.amount}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+      </div>
     </div>
   );
 }

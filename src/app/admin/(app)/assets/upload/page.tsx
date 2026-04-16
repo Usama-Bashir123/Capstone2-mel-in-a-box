@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useRef } from "react";
-import { ChevronRight, UploadCloud, Upload } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { ChevronRight, UploadCloud, Upload, Loader2 } from "lucide-react";
+import { db, storage } from "@/lib/firebase";
+import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { logActivity } from "@/lib/activity";
 
-// ── Shared primitives (mirrors stories/add pattern) ───────────────
+// ── Shared primitives ──────────────────────────────────────────────
 
 function FormLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
@@ -40,7 +44,7 @@ function FormInput({
 
 function FormSelect({
   label, options, value, onChange, placeholder, required,
-}: { label: string; options: string[]; value: string; onChange: (v: string) => void; placeholder?: string; required?: boolean }) {
+}: { label: string; options: {id: string, name: string}[]; value: string; onChange: (v: string) => void; placeholder?: string; required?: boolean }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
       <FormLabel required={required}>{label}</FormLabel>
@@ -59,7 +63,7 @@ function FormSelect({
           }}
         >
           <option value="" disabled>{placeholder ?? "Choose"}</option>
-          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+          {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
         <ChevronRight
           size={16}
@@ -101,10 +105,32 @@ export default function UploadAssetPage() {
   });
   const [file, setFile]           = useState<File | null>(null);
   const [dragging, setDragging]   = useState(false);
+  const [loading, setLoading]     = useState(false);
+  
+  const [stories, setStories] = useState<{id: string, name: string}[]>([]);
+  const [games, setGames]     = useState<{id: string, name: string}[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const storySnap = await getDocs(collection(db, "stories"));
+      setStories(storySnap.docs.map(d => ({ id: d.id, name: d.data().title })));
+      
+      const gameSnap = await getDocs(collection(db, "games"));
+      setGames(gameSnap.docs.map(d => ({ id: d.id, name: d.data().title })));
+    };
+    fetchData();
+  }, []);
 
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  const handleFileSelect = (f: File) => setFile(f);
+  const handleFileSelect = (f: File) => {
+    setFile(f);
+    if (!form.name) {
+      // Auto-populate name from filename
+      const nameWithoutExt = f.name.replace(/\.[^/.]+$/, "");
+      setForm(prev => ({ ...prev, name: nameWithoutExt }));
+    }
+  };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -113,12 +139,73 @@ export default function UploadAssetPage() {
     if (f) handleFileSelect(f);
   };
 
-  void file; // will be used when API is wired
+  const handleUpload = async () => {
+    if (!form.name || !form.assetType || !file) {
+      alert("Please fill in required fields and select a file.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1. Upload to Storage
+      const timestamp = Date.now();
+      const storagePath = `assets/${form.assetType.toLowerCase()}/${timestamp}_${file.name}`;
+      const storageRef = ref(storage, storagePath);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+
+      // 2. Prepare metadata
+      const fileSize = (file.size / (1024 * 1024)).toFixed(1) + " MB";
+      const fileType = file.name.split(".").pop()?.toUpperCase() || "UNKNOWN";
+      
+      // Used in logic
+      const usedIn = [];
+      if (form.linkStory) {
+        const s = stories.find(x => x.id === form.linkStory);
+        if (s) usedIn.push(s.name);
+      }
+      if (form.linkGame) {
+        const g = games.find(x => x.id === form.linkGame);
+        if (g) usedIn.push(g.name);
+      }
+
+      // 3. Save to Firestore
+      await addDoc(collection(db, "assets"), {
+        tab: form.assetType,
+        name: form.name,
+        description: form.description,
+        usedIn,
+        size: fileSize,
+        type: fileType,
+        uploadedBy: "Admin",
+        uploadDate: serverTimestamp(),
+        url: downloadURL,
+        storagePath,
+        linkStory: form.linkStory,
+        linkGame: form.linkGame,
+        // Optional metadata placeholders
+        resolution: "N/A",
+        duration: "N/A",
+      });
+
+      await logActivity({
+        type: "Asset",
+        activity: `Uploaded new asset: ${form.name}`,
+        targetName: form.name
+      });
+
+      router.push("/admin/assets");
+    } catch (err) {
+      console.error("Upload failed:", err);
+      alert("Failed to upload asset.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
-      {/* Breadcrumb + action buttons */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <Link
@@ -137,6 +224,7 @@ export default function UploadAssetPage() {
         <div style={{ display: "flex", gap: "12px", flexShrink: 0 }}>
           <button
             type="button"
+            disabled={loading}
             onClick={() => router.push("/admin/assets")}
             className="font-nunito font-bold"
             style={{
@@ -150,25 +238,26 @@ export default function UploadAssetPage() {
           </button>
           <button
             type="button"
-            onClick={() => router.push("/admin/assets")}
+            disabled={loading}
+            onClick={handleUpload}
             className="font-nunito font-bold"
             style={{
               display: "inline-flex", alignItems: "center", gap: "8px",
               padding: "10px 14px", borderRadius: "8px",
               border: "1px solid #F63D68", background: "#F63D68",
-              fontSize: "14px", color: "#FFFFFF", cursor: "pointer",
+              fontSize: "14px", color: "#FFFFFF", cursor: loading ? "default" : "pointer",
               boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+              opacity: loading ? 0.7 : 1
             }}
           >
-            <Upload size={15} /> Upload
+            {loading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+            {loading ? "Uploading..." : "Upload"}
           </button>
         </div>
       </div>
 
-      {/* ── Cards ────────────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
-        {/* 1. Upload File */}
         <Card title="Upload File">
           <div
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -223,7 +312,6 @@ export default function UploadAssetPage() {
           </div>
         </Card>
 
-        {/* 2. Asset Details */}
         <Card title="Asset Details">
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             <FormInput
@@ -235,7 +323,7 @@ export default function UploadAssetPage() {
             />
             <FormSelect
               label="Asset Type"
-              options={ASSET_TYPE_OPTIONS}
+              options={ASSET_TYPE_OPTIONS.map(o => ({id: o, name: o}))}
               value={form.assetType}
               onChange={set("assetType")}
               placeholder="Select asset type"
@@ -261,18 +349,19 @@ export default function UploadAssetPage() {
           </div>
         </Card>
 
-        {/* 3. Link To */}
         <Card title="Link To">
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-            <FormInput
+            <FormSelect
               label="Link to Story"
-              placeholder="Select or search a story"
+              placeholder="Select a story"
+              options={stories}
               value={form.linkStory}
               onChange={set("linkStory")}
             />
-            <FormInput
+            <FormSelect
               label="Link to Game"
-              placeholder="Select or search a game"
+              placeholder="Select a game"
+              options={games}
               value={form.linkGame}
               onChange={set("linkGame")}
             />

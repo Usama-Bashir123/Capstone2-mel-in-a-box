@@ -1,26 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Search, SlidersHorizontal, Pencil, Trash2,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
+import { db } from "@/lib/firebase";
+import { collection, query, orderBy, onSnapshot, deleteDoc, doc, writeBatch, Timestamp } from "firebase/firestore";
+import Image from "next/image";
+import { logActivity } from "@/lib/activity";
 
-// ── Mock data ────────────────────────────────────────────────────
-const ALL_GAMES = [
-  { id: "1", no: "01", title: "Counting Jungle",     story: "The Magical Jungle",  status: "Published", updated: "Today, 09:45 AM" },
-  { id: "2", no: "02", title: "Match the Letters",   story: "Space Explorer Mel",  status: "Draft",     updated: "Yesterday, 5:20PM" },
-  { id: "3", no: "03", title: "Hidden Tiger Hunt",   story: "The Magical Jungle",  status: "Published", updated: "Yesterday, 5:20PM" },
-  { id: "4", no: "04", title: "Space Puzzle Pieces", story: "Space Explorer Mel",  status: "Draft",     updated: "Mar 14, 2025" },
-  { id: "5", no: "05", title: "The Magical Jungle",  story: "Underwater Kingdom",  status: "Draft",     updated: "Mar 10, 2025" },
-  { id: "6", no: "06", title: "Ocean Memory Cards",  story: "Underwater Kingdom",  status: "Draft",     updated: "Mar 03, 2025" },
-  { id: "7", no: "07", title: "Dino Number Quest",   story: "Dino Land Adventure", status: "Published", updated: "Feb 27, 2025" },
-  { id: "8", no: "08", title: "Match the Letters",   story: "Dino Land Adventure", status: "Published", updated: "Feb 27, 2025" },
-];
-
-const ICON_BG    = ["#FFF1F3","#F0F4FF","#ECFDF3","#FFFAEB","#F0F9FF","#FDF4FF","#FFF7ED","#F0FDF4"];
-const ICON_EMOJI = ["🎮","🎯","🧩","🚀","🌊","🦕","⭐","🎲"];
+interface Game {
+  id: string;
+  title: string;
+  icon?: string;
+  storyName?: string;
+  storyId?: string;
+  status: "Published" | "Draft";
+  lastUpdated?: Timestamp | string;
+  createdAt?: Timestamp | string;
+}
 
 type Tab = "All" | "Active" | "Draft";
 
@@ -98,10 +98,23 @@ function EmptyState() {
 export default function GamesPage() {
   const [activeTab, setActiveTab] = useState<Tab>("All");
   const [search, setSearch]       = useState("");
-  const [games, setGames]         = useState(ALL_GAMES);
-  // Plain string[] — always creates a new array reference so React
-  // detects every change without any Set-mutation ambiguity.
+  const [games, setGames]         = useState<Game[]>([]);
+  const [loading, setLoading]     = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const q = query(collection(db, "games"), orderBy("lastUpdated", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
+      setGames(list);
+      setLoading(false);
+    }, (err) => {
+      console.error("Firestore Listen Error (Games):", err);
+      setLoading(false);
+      alert(`Failed to load games: ${err.message}`);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const tabs: Tab[] = ["All", "Active", "Draft"];
 
@@ -110,10 +123,9 @@ export default function GamesPage() {
       activeTab === "All"    ? true :
       activeTab === "Active" ? g.status === "Published" :
       g.status === "Draft";
-    return matchTab && g.title.toLowerCase().includes(search.toLowerCase());
+    return matchTab && (g.title || "").toLowerCase().includes(search.toLowerCase());
   });
 
-  // Derive a Set once per render for O(1) lookups in the JSX below
   const selectedSet   = new Set(selectedIds);
   const allSelected   = filtered.length > 0 && filtered.every((g) => selectedSet.has(g.id));
   const someSelected  = filtered.some((g) => selectedSet.has(g.id)) && !allSelected;
@@ -121,11 +133,9 @@ export default function GamesPage() {
 
   const toggleAll = () => {
     if (allSelected) {
-      // Remove all currently-visible rows from selection
       const visibleIds = new Set(filtered.map((g) => g.id));
       setSelectedIds((prev) => prev.filter((id) => !visibleIds.has(id)));
     } else {
-      // Add all currently-visible rows that aren't already selected
       const toAdd = filtered.map((g) => g.id).filter((id) => !selectedSet.has(id));
       setSelectedIds((prev) => [...prev, ...toAdd]);
     }
@@ -137,16 +147,45 @@ export default function GamesPage() {
     );
   };
 
-  // Bulk delete
-  const handleBulkDelete = () => {
-    setGames((prev) => prev.filter((g) => !selectedSet.has(g.id)));
-    setSelectedIds([]);
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Are you sure you want to delete ${selectedCount} games?`)) return;
+    try {
+      const batch = writeBatch(db);
+      selectedIds.forEach(id => {
+        batch.delete(doc(db, "games", id));
+      });
+      await batch.commit();
+      await logActivity({
+        type: "Game",
+        activity: `Bulk deleted ${selectedCount} games`,
+        targetName: "Multiple Games"
+      });
+      setSelectedIds([]);
+    } catch {
+      alert("Failed to delete games.");
+    }
   };
 
-  // Single delete
-  const handleDelete = (id: string) => {
-    setGames((prev) => prev.filter((g) => g.id !== id));
-    setSelectedIds((prev) => prev.filter((x) => x !== id));
+  const handleDelete = async (game: Game) => {
+    if (!window.confirm(`Are you sure you want to delete "${game.title}"?`)) return;
+    try {
+      await deleteDoc(doc(db, "games", game.id));
+      await logActivity({
+        type: "Game",
+        activity: `Deleted game "${game.title}"`,
+        targetName: game.title
+      });
+      setSelectedIds((prev) => prev.filter((x) => x !== game.id));
+    } catch {
+      alert("Failed to delete game.");
+    }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const formatTimestamp = (ts: any) => {
+    if (!ts) return "N/A";
+    if (ts.toDate) return ts.toDate().toLocaleString();
+    return new Date(ts).toLocaleString();
   };
 
   return (
@@ -185,7 +224,6 @@ export default function GamesPage() {
 
         {/* Toolbar: tabs + (delete when selected | search+filter when nothing selected) */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid #F2F4F7", gap: "16px", flexWrap: "wrap" }}>
-          {/* Filter tabs */}
           <div style={{ display: "inline-flex", background: "#F5F5F5", borderRadius: "10px", padding: "4px", gap: "2px" }}>
             {tabs.map((tab) => (
               <button
@@ -207,7 +245,6 @@ export default function GamesPage() {
           </div>
 
           {selectedCount > 0 ? (
-            /* ── Selection mode: show delete button, hide search + filter ── */
             <button
               onClick={handleBulkDelete}
               className="font-nunito font-bold"
@@ -223,7 +260,6 @@ export default function GamesPage() {
               Delete ({selectedCount})
             </button>
           ) : (
-            /* ── Normal mode: show search + filter ── */
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               <div style={{ position: "relative", width: "280px" }}>
                 <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#A3A3A3", pointerEvents: "none" }} />
@@ -259,11 +295,12 @@ export default function GamesPage() {
         </div>
 
         {/* Table body */}
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ padding: "60px", textAlign: "center" }}>Loading games...</div>
+        ) : filtered.length === 0 ? (
           <EmptyState />
         ) : (
           <>
-            {/* Column headers */}
             <div
               style={{
                 display: "grid",
@@ -275,7 +312,6 @@ export default function GamesPage() {
                 gap: "12px",
               }}
             >
-              {/* Header checkbox (select all) */}
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <Checkbox checked={allSelected} indeterminate={someSelected} onChange={toggleAll} />
               </div>
@@ -287,7 +323,6 @@ export default function GamesPage() {
               <span className="font-nunito font-semibold" style={{ fontSize: "12px", lineHeight: "18px", color: "#525252" }}>Action</span>
             </div>
 
-            {/* Rows */}
             {filtered.map((game, i) => {
               const isSelected = selectedSet.has(game.id);
               return (
@@ -304,43 +339,40 @@ export default function GamesPage() {
                     transition: "background 0.1s",
                   }}
                 >
-                  {/* Checkbox */}
                   <Checkbox checked={isSelected} onChange={() => toggleRow(game.id)} />
 
-                  {/* Icon */}
-                  <div
-                    style={{
-                      width: "40px", height: "40px", borderRadius: "8px",
-                      background: ICON_BG[i % ICON_BG.length],
-                      border: "1px solid #E5E5E5",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: "20px",
-                    }}
-                  >
-                    {ICON_EMOJI[i % ICON_EMOJI.length]}
-                  </div>
+                    <div
+                      style={{
+                        width: "40px", height: "40px", borderRadius: "8px",
+                        background: "#F5F5F5",
+                        border: "1px solid #E5E5E5",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        overflow: "hidden", position: "relative"
+                      }}
+                    >
+                      {game.icon ? (
+                        <Image src={game.icon} alt={game.title} fill style={{ objectFit: "cover" }} />
+                      ) : (
+                        <span style={{ fontSize: "20px" }}>🎮</span>
+                      )}
+                    </div>
 
-                  {/* Game Title */}
-                  <span className="font-nunito font-medium" style={{ fontSize: "14px", color: "#141414" }}>
+                  <span className="font-nunito font-medium" style={{ fontSize: "14px", color: "#141414", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {game.title}
                   </span>
 
-                  {/* Linked Story */}
-                  <span className="font-nunito font-normal" style={{ fontSize: "14px", color: "#525252" }}>
-                    {game.story}
+                  <span className="font-nunito font-normal" style={{ fontSize: "14px", color: "#525252", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {game.storyName || game.storyId || "N/A"}
                   </span>
 
-                  {/* Status */}
                   <div>
                     <StatusBadge status={game.status} />
                   </div>
 
-                  {/* Last Updated */}
                   <span className="font-nunito font-normal" style={{ fontSize: "14px", color: "#525252" }}>
-                    {game.updated}
+                    {formatTimestamp(game.lastUpdated || game.createdAt)}
                   </span>
 
-                  {/* Actions */}
                   <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                     <Link
                       href={`/admin/games/${game.id}/edit`}
@@ -351,7 +383,7 @@ export default function GamesPage() {
                     </Link>
                     <button
                       title="Delete"
-                      onClick={() => handleDelete(game.id)}
+                      onClick={() => handleDelete(game)}
                       style={{ background: "none", border: "none", padding: "4px", cursor: "pointer", display: "flex", alignItems: "center", color: "#525252" }}
                     >
                       <Trash2 size={16} />
@@ -361,61 +393,14 @@ export default function GamesPage() {
               );
             })}
 
-            {/* Pagination */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderTop: "1px solid #EAECF0" }}>
-              <button
-                className="font-nunito font-semibold"
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: "6px",
-                  padding: "8px 12px", borderRadius: "8px", border: "1px solid #E5E5E5",
-                  background: "#FFFFFF", fontSize: "14px", color: "#424242",
-                  cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
-                }}
-              >
+              <button className="font-nunito font-semibold" style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "8px", border: "1px solid #E5E5E5", background: "#FFFFFF", fontSize: "14px", color: "#424242" }}>
                 <ChevronLeft size={14} /> Previous
               </button>
-
               <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                {[1, 2, 3].map((n) => (
-                  <button
-                    key={n}
-                    className="font-nunito font-semibold"
-                    style={{
-                      width: "36px", height: "36px", borderRadius: "8px",
-                      border: n === 1 ? "1px solid #F63D68" : "none",
-                      background: n === 1 ? "#FFF1F3" : "transparent",
-                      color: n === 1 ? "#F63D68" : "#525252",
-                      fontSize: "14px", cursor: "pointer",
-                    }}
-                  >
-                    {n}
-                  </button>
-                ))}
-                <span className="font-nunito" style={{ fontSize: "14px", color: "#525252", padding: "0 4px" }}>...</span>
-                {[8, 9, 10].map((n) => (
-                  <button
-                    key={n}
-                    className="font-nunito font-semibold"
-                    style={{
-                      width: "36px", height: "36px", borderRadius: "8px",
-                      border: "none", background: "transparent",
-                      color: "#525252", fontSize: "14px", cursor: "pointer",
-                    }}
-                  >
-                    {n}
-                  </button>
-                ))}
+                <button className="font-nunito font-semibold" style={{ width: "36px", height: "36px", borderRadius: "8px", border: "1px solid #F63D68", background: "#FFF1F3", color: "#F63D68" }}>1</button>
               </div>
-
-              <button
-                className="font-nunito font-semibold"
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: "6px",
-                  padding: "8px 12px", borderRadius: "8px", border: "1px solid #E5E5E5",
-                  background: "#FFFFFF", fontSize: "14px", color: "#424242",
-                  cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
-                }}
-              >
+              <button className="font-nunito font-semibold" style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "8px", border: "1px solid #E5E5E5", background: "#FFFFFF", fontSize: "14px", color: "#424242" }}>
                 Next <ChevronRight size={14} />
               </button>
             </div>
