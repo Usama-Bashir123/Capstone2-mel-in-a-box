@@ -9,7 +9,8 @@ import {
   signInWithPopup, 
   GoogleAuthProvider 
 } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -40,7 +41,17 @@ export default function AdminLoginPage() {
     setError(null);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Check admin status in Firestore
+      const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
+      if (userDoc.exists() && userDoc.data().status === "Disabled") {
+        await auth.signOut();
+        setError("Your account has been disabled. Please contact support.");
+        setLoading(false);
+        return;
+      }
+
       router.push("/admin/stories");
     } catch (err: any) {
       console.error("Login error:", err);
@@ -62,7 +73,17 @@ export default function AdminLoginPage() {
     const provider = new GoogleAuthProvider();
     
     try {
-      await signInWithPopup(auth, provider);
+      const userCredential = await signInWithPopup(auth, provider);
+      
+      // Check admin status in Firestore
+      const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
+      if (userDoc.exists() && userDoc.data().status === "Disabled") {
+        await auth.signOut();
+        setError("Your account has been disabled. Please contact support.");
+        setLoading(false);
+        return;
+      }
+
       router.push("/admin/stories");
     } catch (err: any) {
       console.error("Google login error:", err);

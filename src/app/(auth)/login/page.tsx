@@ -18,7 +18,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, GithubAuthProvider } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -38,7 +39,17 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Check user status in Firestore
+      const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
+      if (userDoc.exists() && userDoc.data().status === "Disabled") {
+        await auth.signOut();
+        setError("Your account has been disabled. Please contact support.");
+        setIsLoading(false);
+        return;
+      }
+
       router.push(role === "parents" ? "/parent" : "/child");
     } catch (err: unknown) {
       console.error(err);
@@ -56,7 +67,17 @@ export default function LoginPage() {
       const authProvider = provider === "google" 
         ? new GoogleAuthProvider() 
         : new GithubAuthProvider();
-      await signInWithPopup(auth, authProvider);
+      const userCredential = await signInWithPopup(auth, authProvider);
+      
+      // Check user status in Firestore
+      const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
+      if (userDoc.exists() && userDoc.data().status === "Disabled") {
+        await auth.signOut();
+        setError("Your account has been disabled. Please contact support.");
+        setIsLoading(false);
+        return;
+      }
+
       router.push(role === "parents" ? "/parent" : "/child");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : `Failed to sign in with ${provider}.`);

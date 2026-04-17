@@ -170,6 +170,27 @@ export default function UsersPage() {
     }
   };
 
+  const handleToggleChildStatus = async (child: Child, e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!child.parentId) return;
+    const newStatus = child.status === "Disabled" ? "Active" : "Disabled";
+    const action = newStatus === "Disabled" ? "disable" : "enable";
+    if (!window.confirm(`Are you sure you want to ${action} ${child.name}'s profile?`)) return;
+    
+    try {
+      await updateDoc(doc(db, "users", child.parentId, "children", child.id), { status: newStatus });
+      await logActivity({
+        type: "Child",
+        activity: `${action === "disable" ? "Disabled" : "Enabled"} profile for "${child.name}"`,
+        targetName: child.name,
+        changes: [`Status changed to ${newStatus}`]
+      });
+    } catch (err) {
+      console.error("Error updating child status:", err);
+      alert("Failed to update child status.");
+    }
+  };
+
   // Tab handling
 
   const handleTabChange = (tab: MainTab) => {
@@ -378,12 +399,12 @@ export default function UsersPage() {
           <>
             <div style={{
               display: "grid",
-              gridTemplateColumns: "44px 1fr 1fr 60px 160px 80px 48px",
+              gridTemplateColumns: "44px 1fr 1fr 60px 100px 140px 100px 80px",
               padding: "14px 20px", background: "#FAFAFA",
               borderBottom: "1px solid #F2F4F7",
               gap: "12px", alignItems: "center",
             }}>
-              {["No#", "Name", "Parent Name", "Age", "STORIES COMPLETED", "Badges", "Action"].map((h) => (
+              {["No#", "Name", "Parent Name", "Age", "Status", "Stories", "Badges", "Action"].map((h) => (
                 <span key={h} className="font-nunito font-semibold" style={{ fontSize: "12px", lineHeight: "18px", color: "#525252" }}>
                   {h}
                 </span>
@@ -399,18 +420,18 @@ export default function UsersPage() {
                 <p className="font-nunito font-semibold" style={{ fontSize: "16px", color: "#141414" }}>No children found</p>
               </div>
             ) : filteredChildren.map((child, i) => (
-              <div
+                <div
                 key={child.id}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "44px 1fr 1fr 60px 160px 80px 48px",
+                  gridTemplateColumns: "44px 1fr 1fr 60px 100px 140px 100px 80px",
                   padding: "16px 20px", background: "#FFFFFF", gap: "12px",
                   borderBottom: i < filteredChildren.length - 1 ? "1px solid #EAECF0" : "none",
                   alignItems: "center",
                 }}
               >
-                <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>{String(i + 1).padStart(2, "0")}</span>
-                <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span className="font-nunito font-semibold" style={{ fontSize: "16px", color: "#525252" }}>{String(i + 1).padStart(2, "0")}</span>
+                <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#141414", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {child.name}
                 </span>
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -419,23 +440,38 @@ export default function UsersPage() {
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>
                   {child.age}
                 </span>
+                <div><StatusBadge status={child.status || "Active"} /></div>
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>
                   2
                 </span>
                 <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>
                   4
                 </span>
-                <Link
-                  href={`/admin/users/children/${child.id}`}
-                  style={{
-                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    width: "32px", height: "32px", borderRadius: "8px",
-                    border: "1px solid #E5E5E5", background: "#FFFFFF", color: "#525252",
-                    textDecoration: "none", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
-                  }}
-                >
-                  <Eye size={15} />
-                </Link>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={(e) => handleToggleChildStatus(child, e)}
+                    style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "32px", height: "32px", borderRadius: "8px",
+                      border: "1px solid #E5E5E5", background: "#FFFFFF", color: child.status === "Disabled" ? "#067647" : "#F04438",
+                      cursor: "pointer", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+                    }}
+                    title={child.status === "Disabled" ? "Enable Profile" : "Disable Profile"}
+                  >
+                    <Slash size={15} />
+                  </button>
+                  <Link
+                    href={`/admin/users/children/${child.id}`}
+                    style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "32px", height: "32px", borderRadius: "8px",
+                      border: "1px solid #E5E5E5", background: "#FFFFFF", color: "#525252",
+                      textDecoration: "none", boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+                    }}
+                  >
+                    <Eye size={15} />
+                  </Link>
+                </div>
               </div>
             ))}
 
