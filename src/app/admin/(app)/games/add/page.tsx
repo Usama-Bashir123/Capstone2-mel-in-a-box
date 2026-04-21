@@ -200,9 +200,10 @@ export default function AddGamePage() {
       });
 
       router.push("/admin/games");
-    } catch (err: any) {
-      console.error("Detailed Error creating game:", err);
-      alert(`Failed to create game: ${err?.message || "Unknown error"}`);
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error("Detailed Error creating game:", error);
+      alert(`Failed to create game: ${error?.message || "Unknown error"}`);
     } finally {
       setIsSaving(false);
     }

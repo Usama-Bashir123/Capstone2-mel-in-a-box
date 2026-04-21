@@ -8,8 +8,6 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { TrendingUp, Loader2 } from "lucide-react";
-import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, collectionGroup, orderBy, limit, onSnapshot } from "firebase/firestore";
 
 // ── Smooth bezier path helper ─────────────────────────────────
 function smoothPath(pts: { x: number; y: number }[]) {

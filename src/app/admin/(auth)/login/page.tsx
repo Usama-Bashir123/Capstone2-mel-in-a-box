@@ -53,11 +53,12 @@ export default function AdminLoginPage() {
       }
 
       router.push("/admin/stories");
-    } catch (err: any) {
-      console.error("Login error:", err);
-      if (err.code === "auth/invalid-credential") {
+    } catch (err: unknown) {
+      const error = err as { code?: string; message?: string }; 
+      console.error("Login error:", error);
+      if (error.code === "auth/invalid-credential") {
         setError("Invalid email or password.");
-      } else if (err.code === "auth/user-not-found") {
+      } else if (error.code === "auth/user-not-found") {
         setError("Account not found.");
       } else {
         setError("Failed to sign in. Please try again.");
@@ -85,7 +86,7 @@ export default function AdminLoginPage() {
       }
 
       router.push("/admin/stories");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Google login error:", err);
       setError("Failed to sign in with Google.");
     } finally {

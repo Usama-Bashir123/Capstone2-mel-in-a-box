@@ -58,9 +58,10 @@ export default function AdminSignupPage() {
       });
 
       router.push("/admin/login");
-    } catch (err: any) {
-      console.error("Signup error:", err);
-      if (err.code === "auth/email-already-in-use") {
+    } catch (err: unknown) {
+      const error = err as { code?: string; message?: string };
+      console.error("Signup error:", error);
+      if (error.code === "auth/email-already-in-use") {
         setError("This email is already in use.");
       } else {
         setError("Failed to create account. Please try again.");

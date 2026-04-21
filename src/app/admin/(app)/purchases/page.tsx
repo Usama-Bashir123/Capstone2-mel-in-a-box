@@ -8,8 +8,7 @@ import {
   TrendingUp, ShoppingCart, DollarSign, RefreshCcw,
   Loader2
 } from "lucide-react";
-import { db } from "@/lib/firebase";
-import { collection, query, orderBy, onSnapshot, limit, Timestamp } from "firebase/firestore";
+import { Timestamp } from "firebase/firestore";
 
 // ── Types ─────────────────────────────────────────────────────────
 interface Purchase {

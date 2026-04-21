@@ -233,9 +233,10 @@ export default function AddStoryPage() {
       });
 
       router.push("/admin/stories");
-    } catch (err: any) {
-      console.error("Detailed Error saving story:", err);
-      alert(`Failed to save story: ${err?.message || "Unknown error"}`);
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error("Detailed Error saving story:", error);
+      alert(`Failed to save story: ${error?.message || "Unknown error"}`);
     } finally {
       setIsSaving(false);
     }

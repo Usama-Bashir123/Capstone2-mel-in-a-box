@@ -22,7 +22,34 @@ interface EmailTemplate {
   id: string;
   name: string;
   body: string;
-  lastUpdated: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  lastUpdated: Timestamp | string | null;
+}
+
+interface PasswordPolicy {
+  minLength: string;
+  expiry: string;
+  requireNumbers: boolean;
+  requireSpecial: boolean;
+}
+
+interface AdminPermissions {
+  [category: string]: string;
+}
+
+interface RolePermissions {
+  [role: string]: AdminPermissions;
+}
+
+interface AdminSettings {
+  language?: string;
+  currency?: string;
+  logoURL?: string;
+  logoName?: string;
+  uploadLogo?: "enable" | "disable";
+  filterWords?: "enable" | "disable";
+  features?: Record<string, boolean>;
+  passwordPolicy?: PasswordPolicy;
+  permissions?: RolePermissions;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -147,7 +174,7 @@ const divider = <div style={{ height: "1px", background: "#F2F4F7" }} />;
 // GENERAL TAB
 // ─────────────────────────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function GeneralTab({ settings, setSettings }: { settings: any; setSettings: (s: any) => void }) {
+function GeneralTab({ settings, setSettings }: { settings: AdminSettings; setSettings: (s: AdminSettings) => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging]       = useState(false);
   const [uploading, setUploading]     = useState(false);
@@ -164,10 +191,11 @@ function GeneralTab({ settings, setSettings }: { settings: any; setSettings: (s:
       const url = await getDownloadURL(sRef);
       setSettings({ ...settings, logoURL: url, logoName: file.name });
       console.log("Logo upload successful:", url);
-    } catch (err: any) {
-      console.error("Detailed Logo upload failed:", err);
+    } catch (err: unknown) {
+      const error = err as { code?: string; message?: string }; // Using any briefly for firebase error codes or cast to FirebaseError if available
+      console.error("Detailed Logo upload failed:", error);
       let msg = "Failed to upload logo.";
-      if (err.code === "storage/unauthorized") {
+      if (error.code === "storage/unauthorized") {
         msg = "Permission denied. Please ensure your Firebase Storage rules allow writes to the 'settings/' folder.";
       } else if (err.message) {
         msg += ` Error: ${err.message}`;
@@ -269,7 +297,7 @@ function GeneralTab({ settings, setSettings }: { settings: any; setSettings: (s:
 // ─────────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function PermissionsTab({ settings, setSettings }: { settings: any; setSettings: (s: any) => void }) {
+function PermissionsTab({ settings, setSettings }: { settings: AdminSettings; setSettings: (s: AdminSettings) => void }) {
   const ROLES = ["Super Admin", "Editor", "Reviewer"];
   const CATEGORIES = ["Access", "Settings", "Stories", "Games", "Users", "Purchases", "Assets"];
   const OPTIONS = ["Full Access", "Full system access", "Editable", "Edit", "View Only", "Restricted"];
@@ -370,7 +398,8 @@ const BACKUP_HISTORY = [
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function BackupTab({ settings, setSettings }: { settings: any; setSettings: (s: any) => void }) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function BackupTab({ settings, setSettings }: { settings: AdminSettings; setSettings: (s: AdminSettings) => void }) {
   const [autoBackup, setAutoBackup] = useState("ON");
   const [frequency, setFrequency]   = useState("Daily");
 
@@ -468,10 +497,10 @@ const SESSIONS = [
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function SecurityTab({ settings, setSettings }: { settings: any; setSettings: (s: any) => void }) {
+function SecurityTab({ settings, setSettings }: { settings: AdminSettings; setSettings: (s: AdminSettings) => void }) {
   const policy = settings.passwordPolicy || { minLength: "8 Characters", expiry: "Every 60 days", requireNumbers: true, requireSpecial: true };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const updatePolicy = (k: string, v: any) => setSettings({ ...settings, passwordPolicy: { ...policy, [k]: v } });
+  const updatePolicy = (k: keyof PasswordPolicy, v: string | boolean) => setSettings({ ...settings, passwordPolicy: { ...policy, [k]: v } });
 
   const [twoFA, setTwoFA]               = useState<"enable" | "disable">("enable");
   const [deviceVerify, setDeviceVerify] = useState<"enable" | "disable">("enable");
@@ -628,8 +657,7 @@ function AdminForm({
     setSaving(true);
     try {
       console.log(isEdit ? "Updating admin account..." : "Creating new admin account...");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const userData: any = {
+      const userData: Record<string, unknown> = {
         displayName: form.name,
         email: form.email,
         role: form.role || "Editor",
@@ -655,10 +683,11 @@ function AdminForm({
         });
       }
       onSave();
-    } catch (err: any) {
-      console.error("Detailed Admin save failed:", err);
+    } catch (err: unknown) {
+      const error = err as { code?: string; message?: string };
+      console.error("Detailed Admin save failed:", error);
       let msg = `Failed to save admin account.`;
-      if (err.code === "permission-denied") {
+      if (error.code === "permission-denied") {
         msg = "Permission denied. Please ensure your Firestore rules allow admins to manage the 'users' collection.";
       } else if (err.message) {
         msg += ` Error: ${err.message}`;
@@ -761,7 +790,8 @@ function AdminForm({
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function AdminAccountsTab({ settings, setSettings }: { settings: any; setSettings: (s: any) => void }) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function AdminAccountsTab({ settings, setSettings }: { settings: AdminSettings; setSettings: (s: AdminSettings) => void }) {
   const [view, setView]         = useState<AdminView>("list");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [editTarget, setEditTarget] = useState<any | null>(null);
@@ -794,10 +824,11 @@ function AdminAccountsTab({ settings, setSettings }: { settings: any; setSetting
         activity: `${newStatus === "Active" ? "Enabled" : "Disabled"} admin account for "${admin.displayName || admin.name}"`,
         targetName: admin.displayName || admin.name
       });
-    } catch (err: any) {
-      console.error("Toggle admin status failed:", err);
+    } catch (err: unknown) {
+      const error = err as { code?: string; message?: string };
+      console.error("Toggle admin status failed:", error);
       let msg = "Failed to update status.";
-      if (err.code === "permission-denied") {
+      if (error.code === "permission-denied") {
         msg = "Permission denied. Please ensure your Firestore rules allow admins to manage the 'users' collection.";
       } else if (err.message) {
         msg += ` Error: ${err.message}`;
@@ -1097,7 +1128,7 @@ const TABS: SettingsTab[] = [
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("General");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [settings, setSettings]   = useState<any>(null);
+  const [settings, setSettings]   = useState<AdminSettings | null>(null);
   const [loading, setLoading]     = useState(true);
   const [saving, setSaving]       = useState(false);
 
@@ -1161,10 +1192,11 @@ export default function SettingsPage() {
         targetName: "Admin Settings"
       });
       alert("Settings saved successfully!");
-    } catch (err: any) {
-      console.error("Save settings failed:", err);
+    } catch (err: unknown) {
+      const error = err as { code?: string; message?: string };
+      console.error("Save settings failed:", error);
       let msg = "Failed to save settings.";
-      if (err.code === "permission-denied") {
+      if (error.code === "permission-denied") {
         msg = "Permission denied. Please ensure your Firestore rules allow writes to the 'settings' collection.";
       } else if (err.message) {
         msg += ` Error: ${err.message}`;
