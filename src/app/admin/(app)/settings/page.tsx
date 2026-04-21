@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { UploadCloud, Save, ChevronDown, Download, Trash2, RefreshCw, Eye, EyeOff, Search, Plus, Pencil, Lock, Unlock, ChevronRight, Bold, Italic, Underline, Strikethrough, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { db, storage } from "@/lib/firebase";
-import { doc, setDoc, onSnapshot, collection, query, where, serverTimestamp, addDoc } from "firebase/firestore";
+import { doc, setDoc, onSnapshot, collection, query, where, serverTimestamp, addDoc, Timestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { logActivity } from "@/lib/activity";
 
@@ -197,8 +197,8 @@ function GeneralTab({ settings, setSettings }: { settings: AdminSettings; setSet
       let msg = "Failed to upload logo.";
       if (error.code === "storage/unauthorized") {
         msg = "Permission denied. Please ensure your Firebase Storage rules allow writes to the 'settings/' folder.";
-      } else if (err.message) {
-        msg += ` Error: ${err.message}`;
+      } else if (error.message) {
+        msg += ` Error: ${error.message}`;
       }
       alert(msg);
     } finally {
@@ -689,8 +689,8 @@ function AdminForm({
       let msg = `Failed to save admin account.`;
       if (error.code === "permission-denied") {
         msg = "Permission denied. Please ensure your Firestore rules allow admins to manage the 'users' collection.";
-      } else if (err.message) {
-        msg += ` Error: ${err.message}`;
+      } else if (error.message) {
+        msg += ` Error: ${error.message}`;
       }
       alert(msg);
     } finally {
@@ -830,8 +830,8 @@ function AdminAccountsTab({ settings, setSettings }: { settings: AdminSettings; 
       let msg = "Failed to update status.";
       if (error.code === "permission-denied") {
         msg = "Permission denied. Please ensure your Firestore rules allow admins to manage the 'users' collection.";
-      } else if (err.message) {
-        msg += ` Error: ${err.message}`;
+      } else if (error.message) {
+        msg += ` Error: ${error.message}`;
       }
       alert(msg);
     }
@@ -1099,7 +1099,7 @@ function EmailTemplatesTab() {
         <div key={row.id} style={{ display: "grid", gridTemplateColumns: "1fr 200px 80px", gap: "12px", padding: "16px 0", borderBottom: i < filtered.length - 1 ? "1px solid #F2F4F7" : "none", alignItems: "center" }}>
           <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#141414" }}>{row.name}</span>
           <span className="font-nunito font-normal" style={{ fontSize: "16px", color: "#525252" }}>
-            {row.lastUpdated?.toDate ? row.lastUpdated.toDate().toLocaleDateString() : (row.lastUpdated || "N/A")}
+            {(row.lastUpdated as Timestamp)?.toDate ? (row.lastUpdated as Timestamp).toDate().toLocaleDateString() : ((row.lastUpdated as string) || "N/A")}
           </span>
           <div style={{ display: "flex", gap: "8px" }}>
             <button title="Edit" onClick={() => { setEditTarget(row); setTemplateName(row.name); setBody(row.body); setView("edit"); }}
@@ -1198,8 +1198,8 @@ export default function SettingsPage() {
       let msg = "Failed to save settings.";
       if (error.code === "permission-denied") {
         msg = "Permission denied. Please ensure your Firestore rules allow writes to the 'settings' collection.";
-      } else if (err.message) {
-        msg += ` Error: ${err.message}`;
+      } else if (error.message) {
+        msg += ` Error: ${error.message}`;
       }
       alert(msg);
     } finally {
@@ -1207,7 +1207,7 @@ export default function SettingsPage() {
     }
   };
 
-  if (loading) {
+  if (loading || !settings) {
     return <div style={{ padding: "60px", textAlign: "center" }} className="font-nunito">Loading settings...</div>;
   }
 
