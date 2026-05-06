@@ -164,12 +164,6 @@ function EmptyState() {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function formatTimestamp(ts: any) {
-  if (!ts) return "N/A";
-  if (ts.toDate) return ts.toDate().toLocaleString();
-  return new Date(ts).toLocaleString();
-}
 
 export default function VideosPage() {
   const [activeTab, setActiveTab] = useState<Tab>("All");

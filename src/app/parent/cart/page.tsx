@@ -63,7 +63,7 @@ export default function CartPage() {
   const [promoCode, setPromoCode] = useState("");
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
   const [promoError, setPromoError] = useState("");
-  const [promoSuccess, setPromoSuccess] = useState(false);
+  const [promoSuccess, setPromoSuccess] = useState(false); // eslint-disable-line @typescript-eslint/no-unused-vars
 
   const discountRate = appliedCode ? (PROMO_CODES[appliedCode] ?? 0) : 0;
   const discount = subtotal * discountRate;

@@ -132,12 +132,6 @@ function EmptyState() {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function formatTs(ts: any) {
-  if (!ts) return "N/A";
-  if (ts.toDate) return ts.toDate().toLocaleDateString();
-  return new Date(ts).toLocaleDateString();
-}
 
 export default function PartyThemesPage() {
   const [activeTab, setActiveTab] = useState<Tab>("All");
