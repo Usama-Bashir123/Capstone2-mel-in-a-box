@@ -70,16 +70,9 @@ export function ParentSidebar() {
         {/* Top: Logo + Nav */}
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 4px" }}>
-            <div style={{ position: "relative", width: "24px", height: "24px", flexShrink: 0 }}>
-              <Image src="/images/mel-logo.png" alt="Mel in a Box" fill style={{ objectFit: "contain" }} />
-            </div>
-            <span
-              className="font-nunito font-bold"
-              style={{ fontSize: "20px", lineHeight: "27px", color: "#F63D68" }}
-            >
-              Mel in a Box
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <Image src="/images/mel-logo-icon.png" alt="" width={72} height={72} style={{ width: "72px", height: "72px", objectFit: "contain", flexShrink: 0 }} />
+            <Image src="/images/mel-logo-text.png" alt="Mel in a Box" width={180} height={72} style={{ flex: 1, height: "72px", objectFit: "contain", objectPosition: "left" }} />
           </div>
 
           {/* Nav */}

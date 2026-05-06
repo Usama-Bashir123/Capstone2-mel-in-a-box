@@ -13,12 +13,14 @@ import {
   PartyPopper,
   Settings,
   LogOut,
+  Film,
 } from "lucide-react";
 
-// Nav items match Figma sidebar exactly — Dashboard, Stories, Games, Party Themes, Rewards & Badges
+// Nav items — Dashboard, Stories, Video Stories, Games, Party Themes, Rewards & Badges
 const navItems = [
   { label: "Dashboard",        href: "/child",               icon: LayoutDashboard },
   { label: "Stories",          href: "/child/stories",       icon: BookOpen },
+  { label: "Videos",           href: "/child/videos",        icon: Film },
   { label: "Games",            href: "/child/games",         icon: Gamepad2 },
   { label: "Party Themes",     href: "/child/party-themes",  icon: PartyPopper },
   { label: "Rewards",          href: "/child/rewards",       icon: Gift },
@@ -47,24 +49,10 @@ export function ChildSidebar() {
   return (
     <aside className="w-[311px] min-h-screen bg-white flex flex-col py-5 px-4 shrink-0 border-r border-gray-100">
 
-      {/* Logo — layout_KB8ZGD: row gap=8, Figma logo image + "Mel in a Box" text */}
-      <div className="flex items-center gap-2 px-3 mb-6">
-        {/* Logo image — fill_RTNK0I: /images/mel-logo.png, 24×24 */}
-        <div className="relative shrink-0" style={{ width: "24px", height: "24px" }}>
-          <Image
-            src="/images/mel-logo.png"
-            alt="Mel in a Box logo"
-            fill
-            style={{ objectFit: "contain" }}
-          />
-        </div>
-        {/* style_S745YF: Nunito 700 20px lh=27px Rosé/500 = #F63D68, stroke Rosé/25 */}
-        <span
-          className="font-nunito font-bold"
-          style={{ fontSize: "20px", lineHeight: "27px", color: "#F63D68" }}
-        >
-          Mel in a Box
-        </span>
+      {/* Logo */}
+      <div className="px-3 mb-6 flex items-center gap-2">
+        <Image src="/images/mel-logo-icon.png" alt="" width={72} height={72} style={{ width: "72px", height: "72px", objectFit: "contain", flexShrink: 0 }} />
+        <Image src="/images/mel-logo-text.png" alt="Mel in a Box" width={180} height={72} style={{ flex: 1, height: "72px", objectFit: "contain", objectPosition: "left" }} />
       </div>
 
       {/* Section label — Nunito 600 16px lh=24px rgb(20,20,20) */}

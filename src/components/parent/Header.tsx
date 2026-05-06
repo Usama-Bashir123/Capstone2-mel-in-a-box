@@ -6,18 +6,25 @@
 // Actions: 40×40 circle buttons border #E5E5E5 shadow-xs
 
 import Link from "next/link";
-import { Search, Bell, Settings } from "lucide-react";
+import { Search, Bell, Settings, ShoppingCart } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-context";
+import { usePathname } from "next/navigation";
+import { useCart } from "@/contexts/CartContext";
 
 export function ParentHeader() {
   const { user } = useAuth();
+  const pathname = usePathname();
+  const { totalItems } = useCart();
+
   const displayName = user?.displayName || user?.email?.split("@")[0] || "User";
   const initials = displayName
     .split(" ")
-    .map((n) => n[0])
+    .map((n: string) => n[0])
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+  const isPartyThemes = pathname.startsWith("/parent/party-themes") || pathname.startsWith("/parent/cart");
 
   return (
     <header
@@ -57,7 +64,36 @@ export function ParentHeader() {
       </div>
 
       {/* Actions */}
-      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+
+        {/* Cart icon — visible on party-themes & cart pages */}
+        {isPartyThemes && (
+          <Link
+            href="/parent/cart"
+            style={{
+              position: "relative", width: "40px", height: "40px", borderRadius: "20px",
+              border: "1px solid #E5E5E5", background: "#FFFFFF",
+              boxShadow: "0px 1px 2px 0px rgba(16,24,40,0.05)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              textDecoration: "none",
+            }}
+          >
+            <ShoppingCart size={18} style={{ color: "#424242" }} />
+            {totalItems > 0 && (
+              <span style={{
+                position: "absolute", top: "5px", right: "5px",
+                minWidth: "16px", height: "16px", borderRadius: "9999px",
+                background: "#F63D68", border: "2px solid #FFFFFF",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "9px", fontWeight: 700, color: "#FFFFFF",
+                fontFamily: "Nunito, sans-serif", lineHeight: 1, padding: "0 3px",
+              }}>
+                {totalItems > 9 ? "9+" : totalItems}
+              </span>
+            )}
+          </Link>
+        )}
+
         {/* Notification */}
         <button
           style={{

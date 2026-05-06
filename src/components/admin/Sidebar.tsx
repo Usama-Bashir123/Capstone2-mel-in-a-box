@@ -20,15 +20,19 @@ import {
   Activity,
   Settings,
   LogOut,
+  Film,
+  PartyPopper,
 } from "lucide-react";
 
 const navItems = [
-  { label: "Dashboard",      href: "/admin",           icon: LayoutDashboard, exact: true },
-  { label: "Stories",        href: "/admin/stories",   icon: BookOpen },
-  { label: "Games",          href: "/admin/games",     icon: Gamepad2 },
-  { label: "Users",          href: "/admin/users",     icon: Users },
-  { label: "Purchases",      href: "/admin/purchases", icon: CreditCard },
-  { label: "Assets Library", href: "/admin/assets",    icon: FolderOpen },
+  { label: "Dashboard",      href: "/admin",                icon: LayoutDashboard, exact: true },
+  { label: "Stories",        href: "/admin/stories",        icon: BookOpen },
+  { label: "Video Stories",  href: "/admin/videos",         icon: Film },
+  { label: "Games",          href: "/admin/games",          icon: Gamepad2 },
+  { label: "Users",          href: "/admin/users",          icon: Users },
+  { label: "Purchases",      href: "/admin/purchases",      icon: CreditCard },
+  { label: "Assets Library", href: "/admin/assets",         icon: FolderOpen },
+  { label: "Party Themes",   href: "/admin/party-themes",   icon: PartyPopper },
   { label: "Activity Log",   href: "/admin/activity",  icon: Activity },
 ];
 
@@ -69,16 +73,9 @@ export function AdminSidebar() {
         {/* Top: Logo + Nav */}
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 4px" }}>
-            <div style={{ position: "relative", width: "24px", height: "24px", flexShrink: 0 }}>
-              <Image src="/images/mel-logo.png" alt="Mel in a Box" fill style={{ objectFit: "contain" }} />
-            </div>
-            <span
-              className="font-nunito font-bold"
-              style={{ fontSize: "20px", lineHeight: "27px", color: "#F63D68" }}
-            >
-              Mel in a Box
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <Image src="/images/mel-logo-icon.png" alt="" width={72} height={72} style={{ width: "72px", height: "72px", objectFit: "contain", flexShrink: 0 }} />
+            <Image src="/images/mel-logo-text.png" alt="Mel in a Box" width={180} height={72} style={{ flex: 1, height: "72px", objectFit: "contain", objectPosition: "left" }} />
           </div>
 
           {/* Nav */}
