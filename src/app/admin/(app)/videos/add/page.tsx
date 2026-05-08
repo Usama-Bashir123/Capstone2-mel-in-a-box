@@ -209,11 +209,24 @@ export default function AddVideoPage() {
 
     try {
       if (videoFile) {
-        setUploadProgress("Uploading video...");
-        const storageRef = ref(storage, `videos/${Date.now()}_${videoFile.name}`);
-        const snapshot = await uploadBytes(storageRef, videoFile);
-        videoUrl = await getDownloadURL(snapshot.ref);
-        setUploadProgress(null);
+        setUploadProgress("Uploading to Cloudinary...");
+        
+        const formData = new FormData();
+        formData.append("file", videoFile);
+        formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+
+        const res = await fetch(
+          `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/video/upload`,
+          { method: "POST", body: formData }
+        );
+
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error?.message || "Cloudinary upload failed");
+        }
+
+        const data = await res.json();
+        videoUrl = data.secure_url;
       }
 
       const docData = {

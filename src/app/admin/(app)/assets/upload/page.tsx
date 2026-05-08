@@ -149,10 +149,35 @@ export default function UploadAssetPage() {
     try {
       // 1. Upload to Storage
       const timestamp = Date.now();
-      const storagePath = `assets/${form.assetType.toLowerCase()}/${timestamp}_${file.name}`;
-      const storageRef = ref(storage, storagePath);
-      await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(storageRef);
+      let downloadURL = "";
+      let storagePath = "";
+
+      if (form.assetType === "Videos" || form.assetType === "Audio") {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+        
+        // Use 'video' resource type for both audio and video in Cloudinary
+        const resourceType = "video";
+        const res = await fetch(
+          `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
+          { method: "POST", body: formData }
+        );
+
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error?.message || "Cloudinary upload failed");
+        }
+
+        const data = await res.json();
+        downloadURL = data.secure_url;
+        storagePath = `cloudinary/${data.public_id}`;
+      } else {
+        storagePath = `assets/${form.assetType.toLowerCase()}/${timestamp}_${file.name}`;
+        const storageRef = ref(storage, storagePath);
+        await uploadBytes(storageRef, file);
+        downloadURL = await getDownloadURL(storageRef);
+      }
 
       // 2. Prepare metadata
       const fileSize = (file.size / (1024 * 1024)).toFixed(1) + " MB";
