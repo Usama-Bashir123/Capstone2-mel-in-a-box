@@ -7,26 +7,57 @@
 // 3. Games list panel — tab filter, search, 3×2 grid, pagination
 // 4. Today's Challenge — full-width banner with game image + dark overlay
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
-import { Search } from "lucide-react";
+import { Search, Loader2 } from "lucide-react";
 import { HeroBanner } from "@/components/child/HeroBanner";
-import { GameCard } from "@/components/child/games/GameCard";
+import { GameCard, Difficulty } from "@/components/child/games/GameCard";
 import { GameFilterToggle } from "@/components/child/games/GameFilterToggle";
 import { StoriesPagination } from "@/components/child/stories/StoriesPagination";
 import { GamePreviewModal } from "@/components/child/games/GamePreviewModal";
+import { db } from "@/lib/firebase";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 
-const games = [
-  { id: "1", title: "Jungle Counting Game", difficulty: "Easy"   as const, badges: 2, starsToEarn: 3, image: "/images/games/game-card-thumbnail.png", played: true  },
-  { id: "2", title: "Match the Letters",    difficulty: "Easy"   as const, badges: 2, starsToEarn: 3, image: "/images/games/game-card-thumbnail.png", played: false },
-  { id: "3", title: "Number Ninja",         difficulty: "Medium" as const, badges: 1, starsToEarn: 2, image: "/images/games/game-card-thumbnail.png", played: false },
-  { id: "4", title: "Shape Sorter",         difficulty: "Easy"   as const, badges: 2, starsToEarn: 3, image: "/images/games/game-card-thumbnail.png", played: true  },
-  { id: "5", title: "Word Builder",         difficulty: "Medium" as const, badges: 1, starsToEarn: 2, image: "/images/games/game-card-thumbnail.png", played: false },
-  { id: "6", title: "Color & Create",       difficulty: "Easy"   as const, badges: 2, starsToEarn: 3, image: "/images/games/game-card-thumbnail.png", played: false },
-];
+interface Game {
+  id: string;
+  title: string;
+  difficulty: Difficulty;
+  badges: number;
+  starsToEarn: number;
+  image: string;
+  played: boolean;
+}
 
 export default function GamesPage() {
+  const [games, setGames] = useState<Game[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
   const [previewGame, setPreviewGame] = useState<{ id: string; title: string } | null>(null);
+
+  useEffect(() => {
+    const q = query(collection(db, "games"), where("status", "==", "Published"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          title: data.title || "",
+          difficulty: (data.difficulty || "Easy") as Difficulty,
+          badges: data.badges || 2,
+          starsToEarn: data.starsToEarn || 3,
+          image: data.icon || "/images/games/game-card-thumbnail.png",
+          played: false, // Placeholder
+        } as Game;
+      });
+      setGames(list);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const filtered = games.filter((g) =>
+    g.title.toLowerCase().includes(search.toLowerCase())
+  );
 
   const handlePlay = (id: string) => {
     const game = games.find((g) => g.id === id);
@@ -68,6 +99,8 @@ export default function GamesPage() {
               <input
                 type="text"
                 placeholder="Search games..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 pr-4 font-nunito font-normal placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-100 focus:border-rose-300"
                 style={{
                   width: "320px",
@@ -83,18 +116,23 @@ export default function GamesPage() {
             </div>
           </div>
 
-          {/* 2 rows × 3 cards — gap=16 */}
+          {/* Grid Layout */}
           <div className="flex flex-col gap-4">
-            <div className="flex gap-4">
-              {games.slice(0, 3).map((g) => (
-                <GameCard key={g.id} {...g} onPlay={handlePlay} />
-              ))}
-            </div>
-            <div className="flex gap-4">
-              {games.slice(3, 6).map((g) => (
-                <GameCard key={g.id} {...g} onPlay={handlePlay} />
-              ))}
-            </div>
+            {loading ? (
+              <div className="flex items-center justify-center py-20 w-full">
+                <Loader2 className="animate-spin text-rose-500" size={40} />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex items-center justify-center py-20 w-full text-gray-500 font-nunito">
+                No games found.
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-4">
+                {filtered.map((g) => (
+                  <GameCard key={g.id} {...g} onPlay={handlePlay} />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Pagination */}
@@ -172,3 +210,4 @@ export default function GamesPage() {
     </>
   );
 }
+

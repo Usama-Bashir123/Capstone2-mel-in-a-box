@@ -315,7 +315,7 @@ export default function PremiumShopPage() {
           className="font-nunito font-semibold"
           style={{ fontSize: "30px", lineHeight: "38px", color: "#141414" }}
         >
-          Premium Shop
+          Mel's Party Box
         </h1>
         <p
           className="font-nunito font-normal"

@@ -10,8 +10,9 @@ import {
   Link2, Image as ImageIcon, Undo2, Redo2,
   Film, Loader2,
 } from "lucide-react";
-import { db } from "@/lib/firebase";
+import { db, storage } from "@/lib/firebase";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { logActivity } from "@/lib/activity";
 
 // ── Shared form primitives ──────────────────────────────────────
@@ -177,12 +178,16 @@ export default function EditVideoPage() {
 
   const [form, setForm] = useState({ name: "", age: "", category: "", description: "" });
   const [existingVideoUrl, setExistingVideoUrl] = useState<string>("");
+  const [existingThumbnailUrl, setExistingThumbnailUrl] = useState<string>("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [thumbnailDragging, setThumbnailDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const thumbnailInputRef = useRef<HTMLInputElement>(null);
 
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -201,6 +206,7 @@ export default function EditVideoPage() {
           description: data.description || "",
         });
         setExistingVideoUrl(data.videoUrl || "");
+        setExistingThumbnailUrl(data.thumbnailUrl || "");
       } catch (err) {
         console.error("Error loading video:", err);
         setNotFound(true);
@@ -231,14 +237,39 @@ export default function EditVideoPage() {
     if (file) handleFileSelect(file);
   };
 
+  const handleThumbnailSelect = (file: File) => {
+    if (!file.type.includes("image/")) {
+      alert("Please select a valid image file.");
+      return;
+    }
+    setThumbnailFile(file);
+  };
+
+  const handleThumbnailDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setThumbnailDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleThumbnailSelect(file);
+  };
+
   const onSave = async (status: "Published" | "Draft") => {
     if (!form.name || isSaving) return;
     setIsSaving(true);
     let videoUrl = existingVideoUrl;
+    let thumbnailUrl = existingThumbnailUrl;
 
     try {
+      // 1. Upload Thumbnail to Firebase Storage
+      if (thumbnailFile) {
+        setUploadProgress("Uploading thumbnail...");
+        const thumbRef = ref(storage, `videos/thumbnails/${Date.now()}_${thumbnailFile.name}`);
+        const thumbSnap = await uploadBytes(thumbRef, thumbnailFile);
+        thumbnailUrl = await getDownloadURL(thumbSnap.ref);
+      }
+
+      // 2. Upload Video to Cloudinary
       if (videoFile) {
-        setUploadProgress("Uploading to Cloudinary...");
+        setUploadProgress("Uploading video...");
         
         const formData = new FormData();
         formData.append("file", videoFile);
@@ -264,6 +295,7 @@ export default function EditVideoPage() {
         category: form.category || "Uncategorized",
         description: form.description,
         videoUrl,
+        thumbnailUrl,
         status,
         lastUpdated: serverTimestamp(),
       });
@@ -386,93 +418,187 @@ export default function EditVideoPage() {
           </div>
         </Card>
 
-        {/* Upload Video */}
-        <Card title="Upload Video">
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={handleDrop}
-            onClick={() => !isSaving && fileInputRef.current?.click()}
-            style={{
-              display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
-              padding: "16px 24px", borderRadius: "8px",
-              border: `1px solid ${dragging ? "#F63D68" : "#E5E5E5"}`,
-              background: dragging ? "#FFF5F6" : "#FFFFFF",
-              cursor: isSaving ? "default" : "pointer",
-              textAlign: "center", transition: "border-color 0.15s, background 0.15s",
-              opacity: isSaving ? 0.7 : 1,
-            }}
-          >
-            {videoFile ? (
-              /* New file selected */
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-                <div style={{
-                  width: "48px", height: "48px", borderRadius: "8px",
-                  background: "#FFF1F3", border: "1px solid #FECDDA",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <Film size={24} style={{ color: "#F63D68" }} />
+        {/* Upload Video & Thumbnail */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+          {/* Video Upload */}
+          <Card title="Upload Video">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => !isSaving && fileInputRef.current?.click()}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
+                padding: "16px 24px", borderRadius: "8px",
+                border: `1px solid ${dragging ? "#F63D68" : "#E5E5E5"}`,
+                background: dragging ? "#FFF5F6" : "#FFFFFF",
+                cursor: isSaving ? "default" : "pointer",
+                textAlign: "center", transition: "border-color 0.15s, background 0.15s",
+                opacity: isSaving ? 0.7 : 1, minHeight: "160px", justifyContent: "center"
+              }}
+            >
+              {videoFile ? (
+                /* New file selected */
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                  <div style={{
+                    width: "48px", height: "48px", borderRadius: "8px",
+                    background: "#FFF1F3", border: "1px solid #FECDDA",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Film size={24} style={{ color: "#F63D68" }} />
+                  </div>
+                  <p className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#141414", margin: 0 }}>
+                    {videoFile.name}
+                  </p>
+                  <p className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252", margin: 0 }}>
+                    {formatFileSize(videoFile.size)} — Click to change
+                  </p>
                 </div>
-                <p className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#141414", margin: 0 }}>
-                  {videoFile.name}
-                </p>
-                <p className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252", margin: 0 }}>
-                  {formatFileSize(videoFile.size)} — Click to change
-                </p>
-              </div>
-            ) : existingVideoUrl ? (
-              /* Existing video */
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-                <div style={{
-                  width: "48px", height: "48px", borderRadius: "8px",
-                  background: "#F0FDF4", border: "1px solid #ABEFC6",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <Film size={24} style={{ color: "#067647" }} />
+              ) : existingVideoUrl ? (
+                /* Existing video */
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                  <div style={{
+                    width: "48px", height: "48px", borderRadius: "8px",
+                    background: "#F0FDF4", border: "1px solid #ABEFC6",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Film size={24} style={{ color: "#067647" }} />
+                  </div>
+                  <p className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#141414", margin: 0 }}>
+                    Video uploaded
+                  </p>
+                  <p className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252", margin: 0 }}>
+                    Click to replace with a new video
+                  </p>
                 </div>
-                <p className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#141414", margin: 0 }}>
-                  Video uploaded
-                </p>
-                <p className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252", margin: 0 }}>
-                  Click to replace with a new video
-                </p>
-              </div>
-            ) : (
-              /* No video */
-              <>
-                <div style={{
-                  width: "40px", height: "40px", borderRadius: "8px",
-                  border: "1px solid #EAECF0", background: "#FFFFFF",
-                  boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  <UploadCloud size={20} style={{ color: "#525252" }} />
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                    <span className="font-nunito font-bold" style={{ fontSize: "14px", color: "#F63D68" }}>
-                      Click to upload
-                    </span>
-                    <span className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252" }}>
-                      or drag and drop
+              ) : (
+                /* No video */
+                <>
+                  <div style={{
+                    width: "40px", height: "40px", borderRadius: "8px",
+                    border: "1px solid #EAECF0", background: "#FFFFFF",
+                    boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  }}>
+                    <UploadCloud size={20} style={{ color: "#525252" }} />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <span className="font-nunito font-bold" style={{ fontSize: "14px", color: "#F63D68" }}>
+                        Click to upload
+                      </span>
+                      <span className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252" }}>
+                        or drag and drop
+                      </span>
+                    </div>
+                    <span className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252", textAlign: "center" }}>
+                      mp4 max size 200MB
                     </span>
                   </div>
-                  <span className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252", textAlign: "center" }}>
-                    mp4 max size should be 200MB
-                  </span>
-                </div>
-              </>
-            )}
+                </>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/mp4,video/*"
+                style={{ display: "none" }}
+                onChange={(e) => { if (e.target.files?.[0]) handleFileSelect(e.target.files[0]); }}
+              />
+            </div>
+          </Card>
 
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/mp4,video/*"
-              style={{ display: "none" }}
-              onChange={(e) => { if (e.target.files?.[0]) handleFileSelect(e.target.files[0]); }}
-            />
-          </div>
-        </Card>
+          {/* Thumbnail Upload */}
+          <Card title="Upload Thumbnail">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setThumbnailDragging(true); }}
+              onDragLeave={() => setThumbnailDragging(false)}
+              onDrop={handleThumbnailDrop}
+              onClick={() => !isSaving && thumbnailInputRef.current?.click()}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
+                padding: "16px 24px", borderRadius: "8px",
+                border: `1px solid ${thumbnailDragging ? "#F63D68" : "#E5E5E5"}`,
+                background: thumbnailDragging ? "#FFF5F6" : "#FFFFFF",
+                cursor: isSaving ? "default" : "pointer",
+                textAlign: "center", transition: "border-color 0.15s, background 0.15s",
+                opacity: isSaving ? 0.7 : 1, minHeight: "160px", justifyContent: "center"
+              }}
+            >
+              {thumbnailFile ? (
+                /* New thumbnail selected */
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                  <div style={{
+                    width: "48px", height: "48px", borderRadius: "8px",
+                    background: "#F9FAFB", border: "1px solid #EAECF0",
+                    display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden"
+                  }}>
+                    <img
+                      src={URL.createObjectURL(thumbnailFile)}
+                      alt="Thumbnail preview"
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </div>
+                  <p className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#141414", margin: 0 }}>
+                    {thumbnailFile.name}
+                  </p>
+                  <p className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252", margin: 0 }}>
+                    {formatFileSize(thumbnailFile.size)} — Click to change
+                  </p>
+                </div>
+              ) : existingThumbnailUrl ? (
+                /* Existing thumbnail */
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                  <div style={{
+                    width: "48px", height: "48px", borderRadius: "8px",
+                    background: "#F9FAFB", border: "1px solid #EAECF0",
+                    display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden"
+                  }}>
+                    <img
+                      src={existingThumbnailUrl}
+                      alt="Existing thumbnail"
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </div>
+                  <p className="font-nunito font-semibold" style={{ fontSize: "14px", color: "#141414", margin: 0 }}>
+                    Thumbnail uploaded
+                  </p>
+                  <p className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252", margin: 0 }}>
+                    Click to replace with a new image
+                  </p>
+                </div>
+              ) : (
+                /* No thumbnail */
+                <>
+                  <div style={{
+                    width: "40px", height: "40px", borderRadius: "8px",
+                    border: "1px solid #EAECF0", background: "#FFFFFF",
+                    boxShadow: "0px 1px 2px rgba(16,24,40,0.05)",
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  }}>
+                    <ImageIcon size={20} style={{ color: "#525252" }} />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <span className="font-nunito font-bold" style={{ fontSize: "14px", color: "#F63D68" }}>
+                        Click to upload image
+                      </span>
+                    </div>
+                    <span className="font-nunito font-normal" style={{ fontSize: "12px", color: "#525252" }}>
+                      JPG, PNG or SVG
+                    </span>
+                  </div>
+                </>
+              )}
+              <input
+                ref={thumbnailInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={(e) => { if (e.target.files?.[0]) handleThumbnailSelect(e.target.files[0]); }}
+              />
+            </div>
+          </Card>
+        </div>
 
         {/* Summary / Description */}
         <Card title="Summary">

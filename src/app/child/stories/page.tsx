@@ -13,7 +13,7 @@
 //   Banner: 300px tall, dark gradient overlay, featured-story.png
 //   "Start Reading" button Rosé/500
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Search } from "lucide-react";
 import { HeroBanner } from "@/components/child/HeroBanner";
@@ -21,22 +21,70 @@ import { StoryCard } from "@/components/child/stories/StoryCard";
 import { StoryFilterToggle } from "@/components/child/stories/StoryFilterToggle";
 import { StoriesPagination } from "@/components/child/stories/StoriesPagination";
 import { StoryPreviewModal } from "@/components/child/stories/StoryPreviewModal";
+import { StoryReader } from "@/components/child/stories/StoryReader";
+import { db } from "@/lib/firebase";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 
-const stories = [
-  { id: "1", title: "Underwater Kingdom", progress: 50, lastRead: "2 hrs ago", image: "/images/stories/story-1.png" },
-  { id: "2", title: "The Brave Little Fox", progress: 65, lastRead: "Yesterday", image: "/images/stories/story-2.png" },
-  { id: "3", title: "Stars and Planets", progress: 20, lastRead: "3 days ago", image: "/images/stories/story-3.png" },
-  { id: "4", title: "Jungle Friends", progress: 80, lastRead: "Today", image: "/images/stories/story-4.png" },
-  { id: "5", title: "Pirate Island", progress: 35, lastRead: "1 week ago", image: "/images/stories/story-5.png" },
-  { id: "6", title: "Magic Garden", progress: 10, lastRead: "Not started", image: "/images/stories/story-6.png" },
-];
+import { Loader2 } from "lucide-react";
+
+interface Story {
+  id: string;
+  title: string;
+  cover?: string;
+  age: string;
+  description: string;
+  progress: number;
+  lastRead: string;
+}
+
+interface ReadingStory extends Story {
+  pages: { label: string; image: string; text?: string }[];
+}
+
+
 
 export default function StoriesPage() {
-  const [previewStory, setPreviewStory] = useState<{ id: string; title: string } | null>(null);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [previewStory, setPreviewStory] = useState<Story | null>(null);
+  const [readingStory, setReadingStory] = useState<ReadingStory | null>(null);
+
+  const mockPages = [
+    { label: "Page 01", image: "/images/stories/story-page.png", text: "Once upon a time, in a magical land far away..." },
+    { label: "Page 02", image: "/images/stories/story-page.png", text: "Mel discovered a secret path leading to the crystal cave." },
+    { label: "Page 03", image: "/images/stories/story-page.png", text: "Inside the cave, thousands of stars were dancing on the ceiling." },
+    { label: "Page 04", image: "/images/stories/story-page.png", text: "It was the most beautiful thing Mel had ever seen!" },
+  ];
+
+  useEffect(() => {
+    const q = query(collection(db, "stories"), where("status", "==", "Published"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          title: data.title || "",
+          cover: data.cover || "/images/stories/story-1.png",
+          age: data.age || "N/A",
+          description: data.description || "",
+          progress: 0, // Placeholder
+          lastRead: "Not started", // Placeholder
+        } as Story;
+      });
+      setStories(list);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const filtered = stories.filter((s) =>
+    s.title.toLowerCase().includes(search.toLowerCase())
+  );
 
   const handleContinue = (id: string) => {
     const story = stories.find((s) => s.id === id);
-    if (story) setPreviewStory({ id: story.id, title: story.title });
+    if (story) setPreviewStory(story);
   };
 
   return (
@@ -74,6 +122,8 @@ export default function StoriesPage() {
               <input
                 type="text"
                 placeholder="Search stories..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 pr-4 font-nunito font-normal placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-100 focus:border-rose-300"
                 style={{
                   width: "320px",
@@ -89,18 +139,23 @@ export default function StoriesPage() {
             </div>
           </div>
 
-          {/* 2 rows × 3 cards — row gap=16 */}
+          {/* 2 rows × 3 cards (Dynamic) */}
           <div className="flex flex-col gap-4">
-            <div className="flex gap-4">
-              {stories.slice(0, 3).map((s) => (
-                <StoryCard key={s.id} {...s} onContinue={handleContinue} />
-              ))}
-            </div>
-            <div className="flex gap-4">
-              {stories.slice(3, 6).map((s) => (
-                <StoryCard key={s.id} {...s} onContinue={handleContinue} />
-              ))}
-            </div>
+            {loading ? (
+              <div className="flex items-center justify-center py-10 w-full">
+                <Loader2 className="animate-spin text-rose-500" size={32} />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex items-center justify-center py-10 w-full text-gray-500 font-nunito">
+                No stories found.
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-4">
+                {filtered.map((s) => (
+                  <StoryCard key={s.id} {...s} image={s.cover!} onContinue={handleContinue} />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Pagination */}
@@ -158,7 +213,7 @@ export default function StoriesPage() {
 
               {/* Start Reading button — Rosé/500 p=8px 12px r=8 */}
               <button
-                onClick={() => setPreviewStory({ id: "featured", title: "Discover a magical new story" })}
+                onClick={() => filtered[0] && handleContinue(filtered[0].id)}
                 className="flex items-center justify-center font-nunito font-bold text-white hover:opacity-90 transition-opacity shrink-0"
                 style={{
                   padding: "8px 12px",
@@ -180,6 +235,18 @@ export default function StoriesPage() {
         <StoryPreviewModal
           title={previewStory.title}
           onClose={() => setPreviewStory(null)}
+          onStartReading={() => {
+            setReadingStory({ ...previewStory, pages: mockPages });
+            setPreviewStory(null);
+          }}
+        />
+      )}
+
+      {/* Story Reader */}
+      {readingStory && (
+        <StoryReader
+          story={readingStory}
+          onClose={() => setReadingStory(null)}
         />
       )}
     </>

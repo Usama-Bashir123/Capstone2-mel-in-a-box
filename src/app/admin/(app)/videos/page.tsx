@@ -17,6 +17,7 @@ interface Video {
   age: string;
   category?: string;
   videoUrl?: string;
+  thumbnailUrl?: string;
   status: "Published" | "Draft";
   lastUpdated?: Timestamp | string;
   createdAt?: Timestamp | string;
@@ -359,8 +360,8 @@ export default function VideosPage() {
                     background: "#F5F5F5", display: "flex", alignItems: "center",
                     justifyContent: "center", overflow: "hidden", border: "1px solid #E5E5E5",
                   }}>
-                    {video.videoUrl ? (
-                      <Film size={22} style={{ color: "#F63D68" }} />
+                    {video.thumbnailUrl ? (
+                      <img src={video.thumbnailUrl} alt={video.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     ) : (
                       <Film size={22} style={{ color: "#D6D6D6" }} />
                     )}

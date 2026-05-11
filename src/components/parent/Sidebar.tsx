@@ -29,7 +29,7 @@ const navItems = [
   { label: "Story Progress",     href: "/parent/story-progress",   icon: BookOpen },
   { label: "Rewards & Badges",   href: "/parent/rewards",          icon: Award },
   { label: "Party Themes",       href: "/parent/party-themes",     icon: PartyPopper },
-  { label: "Premium Shop",       href: "/parent/premium-shop",     icon: ShoppingBag },
+  { label: "Mel's Party Box",   href: "/parent/premium-shop",     icon: ShoppingBag },
   { label: "Purchases & Billing",href: "/parent/purchases",        icon: CreditCard },
 ];
 

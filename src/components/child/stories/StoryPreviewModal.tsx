@@ -2,12 +2,13 @@
 
 import Image from "next/image";
 import { X } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 
 interface StoryPreviewModalProps {
   title: string;
   onClose: () => void;
+  onStartReading: () => void;
 }
 
 const pages = [
@@ -17,11 +18,18 @@ const pages = [
   { label: "Page 04", image: "/images/stories/story-page.png" },
 ];
 
-export function StoryPreviewModal({ title, onClose }: StoryPreviewModalProps) {
+export function StoryPreviewModal({ title, onClose, onStartReading }: StoryPreviewModalProps) {
   const [activePage, setActivePage] = useState(0);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // This component only ever mounts after a user click (previewStory starts null),
   // so it always runs on the client where document.body is available.
+  if (!mounted) return null;
+
   return createPortal(
     <div
       style={{
@@ -96,6 +104,7 @@ export function StoryPreviewModal({ title, onClose }: StoryPreviewModalProps) {
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <span className="font-nunito font-normal" style={{ fontSize: "14px", lineHeight: "20px", color: "#525252" }}>Reading time: 10 min</span>
             <button
+              onClick={onStartReading}
               className="font-nunito font-bold"
               style={{ padding: "8px 12px", borderRadius: "8px", background: "#F63D68", fontSize: "14px", lineHeight: "20px", border: "none", cursor: "pointer", color: "#fff" }}
             >

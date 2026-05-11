@@ -1,19 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { X, Play, Clock, Star, ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { X, Play, Clock, Star } from "lucide-react";
+import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 
 interface VideoItem {
   id: string;
   title: string;
+  description?: string;
+  videoUrl: string;
+  thumbnailUrl: string;
   duration: string;
   progress: number;
-  image: string;
-  description?: string;
   stars?: number;
-  episode?: string;
 }
 
 interface WatchVideoModalProps {
@@ -21,16 +21,22 @@ interface WatchVideoModalProps {
   onClose: () => void;
 }
 
-const RELATED_EPISODES = [
-  { label: "Episode 01", image: "/images/stories/story-1.png" },
-  { label: "Episode 02", image: "/images/stories/story-2.png" },
-  { label: "Episode 03", image: "/images/stories/story-3.png" },
-  { label: "Episode 04", image: "/images/stories/story-4.png" },
-];
+
 
 export function WatchVideoModal({ video, onClose }: WatchVideoModalProps) {
-  const [activeEpisode, setActiveEpisode] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const togglePlay = () => {
+    if (videoRef.current) {
+      if (playing) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setPlaying(!playing);
+    }
+  };
 
   return createPortal(
     <div
@@ -75,123 +81,45 @@ export function WatchVideoModal({ video, onClose }: WatchVideoModalProps) {
           {/* Video player area */}
           <div
             style={{
-              position: "relative", width: "100%", height: "340px",
+              position: "relative", width: "100%", height: "480px",
               borderRadius: "12px", overflow: "hidden", background: "#000000",
               cursor: "pointer",
             }}
-            onClick={() => setPlaying(!playing)}
           >
-            <Image
-              src={RELATED_EPISODES[activeEpisode].image}
-              alt={video.title}
-              fill
-              style={{ objectFit: "cover", opacity: playing ? 0.5 : 1, transition: "opacity 0.2s" }}
+            <video
+              ref={videoRef}
+              src={video.videoUrl}
+              poster={video.thumbnailUrl}
+              style={{ width: "100%", height: "100%", objectFit: "contain" }}
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+              onClick={togglePlay}
+              controls
             />
 
-            {/* Gradient overlay */}
-            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.7) 100%)" }} />
-
-            {/* Play / Pause button */}
-            {!playing ? (
-              <div className="absolute inset-0 flex items-center justify-center">
+            {/* Play overlay when not playing and no controls active or just as a custom UI */}
+            {!playing && (
+              <div 
+                className="absolute inset-0 flex items-center justify-center"
+                style={{ pointerEvents: "none" }}
+              >
                 <div
                   style={{
                     width: "72px", height: "72px", borderRadius: "50%",
                     background: "rgba(255,255,255,0.95)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     boxShadow: "0px 8px 24px rgba(0,0,0,0.3)",
+                    pointerEvents: "auto"
                   }}
+                  onClick={(e) => { e.stopPropagation(); togglePlay(); }}
                 >
                   <Play size={32} style={{ color: "#F63D68", marginLeft: "3px" }} fill="#F63D68" />
                 </div>
               </div>
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div
-                  style={{
-                    width: "72px", height: "72px", borderRadius: "50%",
-                    background: "rgba(255,255,255,0.92)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    boxShadow: "0px 8px 24px rgba(0,0,0,0.3)",
-                  }}
-                >
-                  {/* Pause bars */}
-                  <div style={{ display: "flex", gap: "5px" }}>
-                    <div style={{ width: "5px", height: "22px", background: "#F63D68", borderRadius: "2px" }} />
-                    <div style={{ width: "5px", height: "22px", background: "#F63D68", borderRadius: "2px" }} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Duration + episode label bottom-left */}
-            <div style={{ position: "absolute", bottom: "14px", left: "16px", display: "flex", alignItems: "center", gap: "10px" }}>
-              <span
-                style={{
-                  background: "rgba(0,0,0,0.7)", borderRadius: "6px", padding: "3px 10px",
-                  fontSize: "12px", fontWeight: 700, color: "#FFFFFF", fontFamily: "Nunito, sans-serif",
-                }}
-              >
-                {RELATED_EPISODES[activeEpisode].label}
-              </span>
-              <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                <Clock size={13} style={{ color: "rgba(255,255,255,0.85)" }} />
-                <span className="font-nunito font-medium" style={{ fontSize: "12px", color: "rgba(255,255,255,0.85)" }}>{video.duration}</span>
-              </div>
-            </div>
-
-            {/* Nav arrows */}
-            {activeEpisode > 0 && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setActiveEpisode((p) => p - 1); setPlaying(false); }}
-                style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", width: "36px", height: "36px", borderRadius: "50%", background: "rgba(255,255,255,0.9)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-              >
-                <ChevronLeft size={20} style={{ color: "#525252" }} />
-              </button>
-            )}
-            {activeEpisode < RELATED_EPISODES.length - 1 && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setActiveEpisode((p) => p + 1); setPlaying(false); }}
-                style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", width: "36px", height: "36px", borderRadius: "50%", background: "rgba(255,255,255,0.9)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-              >
-                <ChevronRight size={20} style={{ color: "#525252" }} />
-              </button>
             )}
           </div>
 
-          {/* Episode thumbnails row */}
-          <div style={{ display: "flex", gap: "12px" }}>
-            {RELATED_EPISODES.map((ep, idx) => (
-              <button
-                key={idx}
-                onClick={() => { setActiveEpisode(idx); setPlaying(false); }}
-                style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-              >
-                <div
-                  style={{
-                    position: "relative", width: "100%", height: "90px",
-                    borderRadius: "8px", overflow: "hidden",
-                    border: activeEpisode === idx ? "3px solid #F63D68" : "3px solid transparent",
-                    transition: "border-color 0.15s",
-                  }}
-                >
-                  <Image src={ep.image} alt={ep.label} fill style={{ objectFit: "cover" }} />
-                  {/* Play overlay on inactive */}
-                  {activeEpisode !== idx && (
-                    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Play size={16} style={{ color: "#FFFFFF" }} fill="white" />
-                    </div>
-                  )}
-                </div>
-                <span
-                  className="font-nunito font-semibold"
-                  style={{ fontSize: "13px", lineHeight: "20px", color: activeEpisode === idx ? "#F63D68" : "#525252" }}
-                >
-                  {ep.label}
-                </span>
-              </button>
-            ))}
-          </div>
+
 
           {/* Info row */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -225,7 +153,7 @@ export function WatchVideoModal({ video, onClose }: WatchVideoModalProps) {
               </div>
 
               <button
-                onClick={() => setPlaying(true)}
+                onClick={togglePlay}
                 className="font-nunito font-bold"
                 style={{
                   display: "flex", alignItems: "center", gap: "6px",
@@ -235,7 +163,7 @@ export function WatchVideoModal({ video, onClose }: WatchVideoModalProps) {
                   boxShadow: "0px 2px 8px rgba(246,61,104,0.3)",
                 }}
               >
-                <Play size={15} fill="white" /> {video.progress > 0 ? "Continue Watching" : "Start Watching"}
+                <Play size={15} fill="white" /> {playing ? "Pause" : (video.progress > 0 ? "Continue Watching" : "Start Watching")}
               </button>
             </div>
           </div>

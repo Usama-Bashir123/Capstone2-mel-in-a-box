@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { X } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 
 interface GamePreviewModalProps {
@@ -19,9 +19,15 @@ const thumbnails = [
 
 export function GamePreviewModal({ title, onClose }: GamePreviewModalProps) {
   const [activeThumb, setActiveThumb] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
-  // This component only ever mounts after a user click (previewGame starts null),
-  // so it always runs on the client where document.body is available.
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!mounted) return null;
+
   return createPortal(
     <div
       style={{

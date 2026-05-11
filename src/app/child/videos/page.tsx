@@ -2,23 +2,61 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Search, Play } from "lucide-react";
+import { Search, Play, Loader2 } from "lucide-react";
 import { HeroBanner } from "@/components/child/HeroBanner";
 import { VideoCard } from "@/components/child/videos/VideoCard";
 import { VideoFilterToggle } from "@/components/child/videos/VideoFilterToggle";
 import { WatchVideoModal } from "@/components/child/videos/WatchVideoModal";
+import { db } from "@/lib/firebase";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { useEffect } from "react";
 
-const videos = [
-  { id: "1", title: "Underwater Kingdom",    duration: "8:24",  progress: 50, lastWatched: "2 hrs ago",   image: "/images/stories/story-1.png", description: "Dive deep into the ocean and discover amazing sea creatures.", stars: 3 },
-  { id: "2", title: "The Brave Little Fox",   duration: "6:15",  progress: 65, lastWatched: "Yesterday",   image: "/images/stories/story-2.png", description: "Follow the brave little fox on an exciting adventure through the forest.", stars: 4 },
-  { id: "3", title: "Stars and Planets",      duration: "10:42", progress: 20, lastWatched: "3 days ago",  image: "/images/stories/story-3.png", description: "Explore the solar system and learn about each planet.", stars: 3 },
-  { id: "4", title: "Jungle Friends",         duration: "7:58",  progress: 80, lastWatched: "Today",       image: "/images/stories/story-4.png", description: "Meet friendly jungle animals and learn about their habitat.", stars: 5 },
-  { id: "5", title: "Pirate Island",          duration: "9:10",  progress: 35, lastWatched: "1 week ago",  image: "/images/stories/story-5.png", description: "Sail the seven seas and find the hidden treasure.", stars: 4 },
-  { id: "6", title: "Magic Garden",           duration: "5:33",  progress: 10, lastWatched: "Not started", image: "/images/stories/story-6.png", description: "Discover the secrets of an enchanted garden full of magic.", stars: 3 },
-];
+interface Video {
+  id: string;
+  title: string;
+  description?: string;
+  videoUrl: string;
+  thumbnailUrl: string;
+  duration: string; // Placeholder for now
+  progress: number; // Placeholder for now
+  lastWatched: string; // Placeholder for now
+  stars: number; // Placeholder for now
+}
+
+
 
 export default function VideosPage() {
-  const [watchingVideo, setWatchingVideo] = useState<typeof videos[number] | null>(null);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [watchingVideo, setWatchingVideo] = useState<Video | null>(null);
+
+  useEffect(() => {
+    const q = query(collection(db, "videos"), where("status", "==", "Published"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          title: data.title || "",
+          description: data.description || "",
+          videoUrl: data.videoUrl || "",
+          thumbnailUrl: data.thumbnailUrl || "/images/stories/story-1.png", // Default placeholder
+          duration: "8:24", // Placeholder
+          progress: 0,      // Placeholder
+          lastWatched: "Not started", // Placeholder
+          stars: 3,         // Placeholder
+        } as Video;
+      });
+      setVideos(list);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const filtered = videos.filter((v) =>
+    v.title.toLowerCase().includes(search.toLowerCase())
+  );
 
   const handleWatch = (id: string) => {
     const video = videos.find((v) => v.id === id);
@@ -59,6 +97,8 @@ export default function VideosPage() {
               <input
                 type="text"
                 placeholder="Search videos..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 pr-4 font-nunito font-normal placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-100 focus:border-rose-300"
                 style={{
                   width: "320px", height: "40px", borderRadius: "8px",
@@ -70,24 +110,29 @@ export default function VideosPage() {
             </div>
           </div>
 
-          {/* 2 rows × 3 cards */}
+          {/* 2 rows × 3 cards (Dynamic) */}
           <div className="flex flex-col gap-4">
-            <div className="flex gap-4">
-              {videos.slice(0, 3).map((v) => (
-                <VideoCard key={v.id} {...v} onWatch={handleWatch} />
-              ))}
-            </div>
-            <div className="flex gap-4">
-              {videos.slice(3, 6).map((v) => (
-                <VideoCard key={v.id} {...v} onWatch={handleWatch} />
-              ))}
-            </div>
+            {loading ? (
+              <div className="flex items-center justify-center py-10 w-full">
+                <Loader2 className="animate-spin text-rose-500" size={32} />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex items-center justify-center py-10 w-full text-gray-500 font-nunito">
+                No videos found.
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-4">
+                {filtered.map((v) => (
+                  <VideoCard key={v.id} {...v} image={v.thumbnailUrl} onWatch={handleWatch} />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Pagination */}
           <div className="flex items-center justify-between pt-2" style={{ borderTop: "1px solid #F5F5F5" }}>
             <span className="font-nunito font-normal" style={{ fontSize: "14px", color: "#525252" }}>
-              Showing 1–6 of 12 videos
+              Showing {filtered.length} of {videos.length} videos
             </span>
             <div className="flex items-center gap-2">
               {[1, 2].map((page) => (
@@ -122,10 +167,10 @@ export default function VideosPage() {
           <div
             className="relative overflow-hidden flex flex-col justify-end"
             style={{ borderRadius: "8px", height: "300px", cursor: "pointer" }}
-            onClick={() => handleWatch("1")}
+            onClick={() => filtered[0] && handleWatch(filtered[0].id)}
           >
             <Image
-              src="/images/stories/featured-story.png"
+              src={filtered[0]?.thumbnailUrl || "/images/stories/featured-story.png"}
               alt="Featured video"
               fill
               style={{ objectFit: "cover" }}
@@ -163,7 +208,7 @@ export default function VideosPage() {
                 </h4>
               </div>
               <button
-                onClick={(e) => { e.stopPropagation(); handleWatch("1"); }}
+                onClick={(e) => { e.stopPropagation(); filtered[0] && handleWatch(filtered[0].id); }}
                 className="flex items-center gap-2 font-nunito font-bold text-white hover:opacity-90 transition-opacity shrink-0"
                 style={{ padding: "10px 16px", borderRadius: "8px", background: "#F63D68", fontSize: "14px", lineHeight: "20px", border: "none", cursor: "pointer" }}
               >
