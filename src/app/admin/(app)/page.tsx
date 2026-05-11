@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Image from "next/image";
-import { TrendingUp, Loader2 } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 
 // ── Smooth bezier path helper ─────────────────────────────────
 function smoothPath(pts: { x: number; y: number }[]) {

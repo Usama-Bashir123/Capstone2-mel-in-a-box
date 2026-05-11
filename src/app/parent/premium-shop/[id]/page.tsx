@@ -136,7 +136,7 @@ export default function PremiumShopDetailPage({ params }: { params: { id: string
             className="font-nunito font-bold"
             style={{ fontSize: "14px", lineHeight: "20px", color: "#424242", textDecoration: "none" }}
           >
-            Mel's Party Box
+            Mel&apos;s Party Box
           </Link>
           <ChevronRight size={16} style={{ color: "#737373" }} />
           <span

@@ -208,7 +208,7 @@ export default function VideosPage() {
                 </h4>
               </div>
               <button
-                onClick={(e) => { e.stopPropagation(); filtered[0] && handleWatch(filtered[0].id); }}
+                onClick={(e) => { e.stopPropagation(); if (filtered[0]) handleWatch(filtered[0].id); }}
                 className="flex items-center gap-2 font-nunito font-bold text-white hover:opacity-90 transition-opacity shrink-0"
                 style={{ padding: "10px 16px", borderRadius: "8px", background: "#F63D68", fontSize: "14px", lineHeight: "20px", border: "none", cursor: "pointer" }}
               >

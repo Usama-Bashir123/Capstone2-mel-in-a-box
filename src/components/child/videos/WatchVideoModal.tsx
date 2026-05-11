@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+
 import { X, Play, Clock, Star } from "lucide-react";
 import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
