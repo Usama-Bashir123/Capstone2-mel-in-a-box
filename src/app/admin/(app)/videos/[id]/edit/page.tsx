@@ -10,9 +10,8 @@ import {
   Link2, Image as ImageIcon, Undo2, Redo2,
   Film, Loader2,
 } from "lucide-react";
-import { db, storage } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { logActivity } from "@/lib/activity";
 
 // ── Shared form primitives ──────────────────────────────────────
