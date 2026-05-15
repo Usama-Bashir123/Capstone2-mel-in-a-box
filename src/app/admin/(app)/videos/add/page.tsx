@@ -459,6 +459,7 @@ export default function AddVideoPage() {
                     background: "#F9FAFB", border: "1px solid #EAECF0",
                     display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden"
                   }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={URL.createObjectURL(thumbnailFile)}
                       alt="Thumbnail preview"

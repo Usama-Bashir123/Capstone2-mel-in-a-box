@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Search, Bell, Settings, ShoppingCart, CheckCircle2, AlertCircle, Info, Gift } from "lucide-react";
+import { Search, Bell, Settings, ShoppingCart, CheckCircle2, Info, Gift } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-context";
 import { usePathname, useRouter } from "next/navigation";
 import { useCart } from "@/contexts/CartContext";

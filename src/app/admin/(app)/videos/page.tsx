@@ -361,6 +361,7 @@ export default function VideosPage() {
                     justifyContent: "center", overflow: "hidden", border: "1px solid #E5E5E5",
                   }}>
                     {video.thumbnailUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={video.thumbnailUrl} alt={video.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     ) : (
                       <Film size={22} style={{ color: "#D6D6D6" }} />
